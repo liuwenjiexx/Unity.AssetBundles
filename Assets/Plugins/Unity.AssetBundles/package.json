@@ -1,0 +1,15 @@
+{
+  "name": "unity.assetbundles",
+  "displayName": "Unity AssetBundles",
+  "version": "0.0.1",
+  "unity": "2018.3",
+  "description": "",
+  "keywords": [
+    "unity",
+    "assetbundles",
+    "editor",
+    "build"
+  ],
+  "category": "Unity",
+  "repoPackagePath": "../UnityPackages"
+}
