@@ -1,0 +1,16 @@
+{
+  "name": "system.stringformat",
+  "displayName": "String Format",
+  "version": "0.0.1",
+  "unity": "2019.1",
+  "description": "",
+  "keywords": [
+    "string",
+    "format"
+  ],
+  "category": "Unity",
+  "dependencies": {
+
+  },
+  "repoPackagePath": "../UnityPackages"
+}

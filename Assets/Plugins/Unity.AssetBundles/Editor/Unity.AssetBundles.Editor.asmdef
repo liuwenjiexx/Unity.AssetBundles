@@ -1,7 +1,10 @@
 {
     "name": "Unity.AssetBundles.Editor",
     "references": [
-        "Unity.AssetBundles"
+        "Unity.AssetBundles",
+        "System.StringFormat",
+        "Unity.GUIExtensions.Editor",
+        "Unity.Localization"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [
@@ -12,5 +15,6 @@
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": []
+    "defineConstraints": [],
+    "versionDefines": []
 }

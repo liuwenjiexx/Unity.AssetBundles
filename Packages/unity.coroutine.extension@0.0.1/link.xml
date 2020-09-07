@@ -1,6 +1,0 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
-<linker>
-  <assembly fullname="Coroutines" preserve="all"/>
-  <assembly fullname="UnityEngine.Coroutines" preserve="all"/>
-</linker>
-<!--https://docs.unity3d.com/Manual/IL2CPP-BytecodeStripping.html-->

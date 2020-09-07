@@ -1,8 +1,8 @@
 {
   "name": "unity.assetbundles",
-  "displayName": "Unity AssetBundles",
-  "version": "0.0.1",
-  "unity": "2018.3",
+  "displayName": "AssetBundles",
+  "version": "0.0.2",
+  "unity": "2019.1",
   "description": "",
   "keywords": [
     "unity",
@@ -11,5 +11,9 @@
     "build"
   ],
   "category": "Unity",
+  "dependencies": {
+    "unity.coroutine.extension": "0.0.1",
+    "system.stringformat": "0.0.1"
+  },
   "repoPackagePath": "../UnityPackages"
 }

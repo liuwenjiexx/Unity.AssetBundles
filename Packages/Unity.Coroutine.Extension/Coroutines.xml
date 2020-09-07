@@ -1,0 +1,875 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>Coroutines</name>
+    </assembly>
+    <members>
+        <member name="T:Coroutines.CancellationTokenRegistration">
+            <summary>
+            <see cref="M:Coroutines.CancellationToken.Register(System.Action)" />
+            </summary>
+        </member>
+        <member name="M:Coroutines.CancellationTokenRegistration.Dispose">
+            <summary>
+            cancel this callback
+            </summary>
+        </member>
+        <member name="T:Coroutines.CancellationTokenSource">
+            <summary>
+            如果任务已经运行，则不能取消
+            If the task is already running, you cannot cancel
+            </summary>
+        </member>
+        <member name="M:Coroutines.CancellationTokenSource.#ctor(System.Int32)">
+            <summary>
+            
+            </summary>
+            <param name="millisecondsDelay"></param>
+            <exception cref="T:Coroutines.CoroutineContextRequireException"></exception>
+        </member>
+        <member name="M:Coroutines.CancellationTokenSource.Cancel">
+            <summary>
+            
+            </summary>
+            <exception cref="T:Coroutines.CoroutineAggregateException">token register callback exceptions</exception>
+        </member>
+        <member name="M:Coroutines.CancellationTokenSource.CancelAfter(System.TimeSpan)">
+            <summary>
+            
+            </summary>
+            <param name="delay"></param>
+            <exception cref="T:Coroutines.CoroutineContextRequireException"></exception>
+        </member>
+        <member name="M:Coroutines.CancellationTokenSource.CancelAfter(System.Int32)">
+            <summary>
+            
+            </summary>
+            <param name="millisecondsDelay"></param>
+            <exception cref="T:Coroutines.CoroutineContextRequireException"></exception>
+        </member>
+        <member name="P:Coroutines.Coroutine.IsDone">
+            <summary>
+            是否已完成。包含RanToCompletion、Faulted或Canceled三个状态之一。
+            <para>Whether you have completed. Contains the RanToCompletion, Faulted, or Canceled one of the three States.</para>
+            </summary>
+        </member>
+        <member name="P:Coroutines.Coroutine.IsCanceled">
+            <summary>
+            <see cref="P:Coroutines.Coroutine.Status"/> 为 <see cref="F:Coroutines.CoroutineStatus.Canceled"/>, 原因 <see cref="M:Coroutines.CancellationTokenSource.Cancel"/>
+            <para><see cref="P:Coroutines.Coroutine.Status"/> is <see cref="F:Coroutines.CoroutineStatus.Canceled"/>, reson <see cref="M:Coroutines.CancellationTokenSource.Cancel"/></para>
+            </summary>
+        </member>
+        <member name="P:Coroutines.Coroutine.IsFaulted">
+            <summary>
+            <see cref="P:Coroutines.Coroutine.Status"/> 为 <see cref="F:Coroutines.CoroutineStatus.Faulted"/>, 对应的异常信息 <see cref="P:Coroutines.Coroutine.Exception"/>
+            <para><see cref="P:Coroutines.Coroutine.Status"/> is <see cref="F:Coroutines.CoroutineStatus.Canceled"/>, exception details <see cref="P:Coroutines.Coroutine.Exception"/></para>
+            </summary>
+        </member>
+        <member name="P:Coroutines.Coroutine.IsRanToCompletion">
+            <summary>
+            <see cref="P:Coroutines.Coroutine.Status"/> 为 <see cref="F:Coroutines.CoroutineStatus.RanToCompletion"/>
+            <para><see cref="P:Coroutines.Coroutine.Status"/> is <see cref="F:Coroutines.CoroutineStatus.RanToCompletion"/></para>
+            </summary>
+        </member>
+        <member name="P:Coroutines.Coroutine.ReturnValue">
+            <summary>
+            
+            </summary>
+            <exception cref="T:Coroutines.CoroutineNotReturnValueException"/>
+        </member>
+        <member name="M:Coroutines.Coroutine.WaitAll(Coroutines.Coroutine[])">
+            <summary>
+            infinite wait all task complete
+            </summary>
+            <param name="coroutines"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Coroutine.WaitAll(Coroutines.Coroutine[],Coroutines.CancellationToken)">
+            <summary>
+            
+            </summary>
+            <param name="coroutines"></param>
+            <param name="cancellationToken">external cancel wait </param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Coroutine.WaitAll(Coroutines.Coroutine[],System.Int32,Coroutines.CancellationToken)">
+            <summary>
+            
+            </summary>
+            <param name="coroutines"></param>
+            <param name="millisecondsTimeout"></param>
+            <returns>timeout or error return false, else in time  all task no error complete return true</returns>
+        </member>
+        <member name="M:Coroutines.Coroutine.WaitAny(Coroutines.Coroutine[])">
+            <summary>
+            infinite wait any task complete
+            </summary>
+            <param name="coroutines"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Coroutine.WaitAny(Coroutines.Coroutine[],Coroutines.CancellationToken)">
+            <summary>
+            
+            </summary>
+            <param name="coroutines"></param>
+            <param name="cancellationToken">external cancel wait </param>
+        </member>
+        <member name="M:Coroutines.Coroutine.WaitAny(Coroutines.Coroutine[],System.Int32)">
+            <summary>
+            
+            </summary>
+            <param name="coroutines"></param>
+            <param name="millisecondsTimeout"></param>
+            <returns>timeout or error return false</returns>
+        </member>
+        <member name="F:Coroutines.CoroutineStatus.Created">
+            <summary>
+            任务已初始化，尚未执行
+            </summary>
+        </member>
+        <member name="F:Coroutines.CoroutineStatus.WaitingForActivation">
+            <summary>
+            等待被激活
+            </summary>
+        </member>
+        <member name="F:Coroutines.CoroutineStatus.WaitingToRun">
+            <summary>
+            该任务已被计划执行，但尚未开始执行
+            </summary>
+        </member>
+        <member name="F:Coroutines.CoroutineStatus.Running">
+            <summary>
+            该任务正在运行，但尚未完成
+            </summary>
+        </member>
+        <member name="F:Coroutines.CoroutineStatus.WaitingForChildrenToComplete">
+            <summary>
+            该任务已完成执行，正在隐式等待附加的子任务完成
+            </summary>
+        </member>
+        <member name="F:Coroutines.CoroutineStatus.Canceled">
+            <summary>
+            任务被取消
+            </summary>
+        </member>
+        <member name="F:Coroutines.CoroutineStatus.Faulted">
+            <summary>
+            任务发生异常，执行失败
+            </summary>
+        </member>
+        <member name="F:Coroutines.CoroutineStatus.RanToCompletion">
+            <summary>
+            已成功完成执行
+            </summary>
+        </member>
+        <member name="T:Coroutines.CoroutineContextRequireException">
+            <summary>
+            require coroutine context, invoke  in routine IEnumerator funcation.
+            </summary>
+        </member>
+        <member name="P:Coroutines.Coroutine`1.ReturnValue">
+            <summary>
+            return value
+            </summary>
+            <exception cref="T:Coroutines.CoroutineNotReturnValueException"/>
+        </member>
+        <member name="T:Coroutines.CoroutineException">
+            <summary>
+            Coroutine Exception
+            </summary>
+        </member>
+        <member name="T:Coroutines.CoroutineScheduler">
+            <summary>
+            协同调度程序
+            </summary>
+        </member>
+        <member name="P:Coroutines.CoroutineScheduler.Defualt">
+            <summary>
+            默认调度程序
+            </summary>
+        </member>
+        <member name="P:Coroutines.CoroutineScheduler.Current">
+            <summary>
+            当前调度程序实例, 只能在运行时内部调用
+            get current scheduler in routine
+            </summary>
+        </member>
+        <member name="P:Coroutines.CoroutineScheduler.Id">
+            <summary>
+            调度程序的ID
+            </summary>
+        </member>
+        <member name="P:Coroutines.CoroutineScheduler.MaximumConcurrencyCount">
+            <summary>
+            最大并发数
+            </summary>
+        </member>
+        <member name="P:Coroutines.CoroutineScheduler.Time">
+            <summary>
+            Seconds
+            </summary>
+        </member>
+        <member name="T:Coroutines.CoroutineNotReturnValueException">
+            <summary>
+            routine not return value, <see cref="T:Coroutines.YieldReturn"/>
+            </summary>
+            <example>
+            <code>
+             yield return new <see cref="T:Coroutines.YieldReturn"/>(value);
+            </code>
+            </example>
+        </member>
+        <member name="M:Coroutines.Extensions.ContinueWith(System.Collections.IEnumerator,System.Collections.IEnumerator,System.Action)">
+            <summary>
+            连接两个<see cref="T:System.Collections.IEnumerator"/>
+            concat two <see cref="T:System.Collections.IEnumerator"/>
+            </summary>
+            <param name="source"></param>
+            <param name="continueWith"></param>
+            <param name="callback"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Extensions.ContinueWith(System.Collections.IEnumerator,System.Collections.IEnumerator[])">
+            <summary>
+            连接多个 <see cref="T:System.Collections.IEnumerator"/>
+            concat <see cref="T:System.Collections.IEnumerator"/>
+            </summary>
+            <param name="source"></param>
+            <param name="continueWiths"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Extensions.ContinueWith(System.Collections.IEnumerator,System.Action)">
+            <summary>
+            concat callback
+            </summary>
+            <param name="source"></param>
+            <param name="callback"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Extensions.ContinueWith``1(System.Collections.IEnumerator,System.Action{``0},``0)">
+            <summary>
+            concat callback
+            </summary>
+            <typeparam name="TState"></typeparam>
+            <param name="source"></param>
+            <param name="callback"></param>
+            <param name="state"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Extensions.ContinueWith``1(System.Collections.IEnumerator,System.Collections.IEnumerator,System.Action{``0},``0)">
+            <summary>
+            concat callback
+            </summary>
+            <typeparam name="TState"></typeparam>
+            <param name="source"></param>
+            <param name="continueWith"></param>
+            <param name="callback"></param>
+            <param name="state"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Extensions.ContinueWith``1(System.Collections.IEnumerator,System.Collections.IEnumerator[],System.Action{``0},``0)">
+            <summary>
+            concat callback
+            </summary>
+            <typeparam name="TState"></typeparam>
+            <param name="source"></param>
+            <param name="continueWiths"></param>
+            <param name="callback"></param>
+            <param name="state"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Extensions.StartCoroutine(System.Collections.IEnumerator)">
+            <summary>
+            <see cref="M:Coroutines.CoroutineScheduler.QueueRoutine(System.Collections.IEnumerator,Coroutines.CancellationToken)"></see>
+            </summary>
+            <param name="source"></param>
+            <returns></returns>
+            <exception cref="T:System.ArgumentNullException"/>
+        </member>
+        <member name="M:Coroutines.Extensions.StartCoroutine``1(System.Collections.IEnumerator)">
+            <summary>
+            <see cref="M:Coroutines.CoroutineScheduler.QueueRoutine(System.Collections.IEnumerator,Coroutines.CancellationToken)"></see>
+            </summary>
+            <typeparam name="TResult"></typeparam>
+            <param name="source"></param>
+            <returns></returns>
+            <exception cref="T:System.ArgumentNullException"/>
+        </member>
+        <member name="M:Coroutines.Extensions.StartTask(System.Collections.IEnumerator,Coroutines.CancellationToken)">
+            <summary>
+            <see cref="M:Coroutines.Task.Run(System.Collections.IEnumerator,Coroutines.CancellationToken)"></see>
+            </summary>
+            <param name="source"></param>
+            <param name="cancellationToken"></param>
+            <returns></returns>
+            <exception cref="T:System.ArgumentNullException"/>
+        </member>
+        <member name="M:Coroutines.Extensions.StartTask``1(System.Collections.IEnumerator,Coroutines.CancellationToken)">
+            <summary>
+            <see cref="M:Coroutines.Task.Run(System.Collections.IEnumerator,Coroutines.CancellationToken)"></see>
+            </summary>
+            <typeparam name="TResult"></typeparam>
+            <param name="source"></param>
+            <param name="cancellationToken"></param>
+            <returns></returns>
+            <exception cref="T:System.ArgumentNullException"/>
+        </member>
+        <member name="T:Coroutines.ICatchable">
+            <summary>
+            catch target exception 
+            </summary>
+        </member>
+        <member name="M:Coroutines.ICatchable.HandleException(System.Exception)">
+            <summary>
+            not catch handle ignore exception
+            </summary>
+            <param name="exception"></param>
+        </member>
+        <member name="T:Coroutines.IThrowable">
+            <summary>
+            this object throwable exception
+            </summary>
+        </member>
+        <member name="T:Coroutines.IYield">
+            <summary>
+            协同程序指令
+            coroutine yield command
+            </summary>
+        </member>
+        <member name="T:Coroutines.Lazy`1">
+            <summary>
+            AsyncLazy
+            </summary>
+            <typeparam name="T"></typeparam>
+        </member>
+        <member name="M:Coroutines.Lazy`1.#ctor">
+            <summary>
+            invoke type T defualt constructor
+            </summary>
+        </member>
+        <member name="T:Coroutines.Lazy`2">
+            <summary>
+            Lazy Value
+            </summary>
+            <typeparam name="T"></typeparam>
+            <typeparam name="TMetadata"></typeparam>
+        </member>
+        <member name="T:Coroutines.Resource1">
+            <summary>
+              一个强类型的资源类，用于查找本地化的字符串等。
+            </summary>
+        </member>
+        <member name="P:Coroutines.Resource1.ResourceManager">
+            <summary>
+              返回此类使用的缓存的 ResourceManager 实例。
+            </summary>
+        </member>
+        <member name="P:Coroutines.Resource1.Culture">
+            <summary>
+              重写当前线程的 CurrentUICulture 属性
+              重写当前线程的 CurrentUICulture 属性。
+            </summary>
+        </member>
+        <member name="P:Coroutines.Resource1.Coro_AggException">
+            <summary>
+              查找类似 Coroutine Aggregate Exceptions 的本地化字符串。
+            </summary>
+        </member>
+        <member name="P:Coroutines.Resource1.Coro_AggException_Inner">
+            <summary>
+              查找类似 InnerException {0}: {1} 的本地化字符串。
+            </summary>
+        </member>
+        <member name="P:Coroutines.Resource1.Coro_Canceled">
+            <summary>
+              查找类似 Coroutine Canceled 的本地化字符串。
+            </summary>
+        </member>
+        <member name="P:Coroutines.Resource1.Coro_NotReturnValue">
+            <summary>
+              查找类似 Coroutine Not ReturnValue 的本地化字符串。
+            </summary>
+        </member>
+        <member name="P:Coroutines.Resource1.Coro_RequireContext">
+            <summary>
+              查找类似 Required Coroutine Context 的本地化字符串。
+            </summary>
+        </member>
+        <member name="P:Coroutines.Resource1.Coro_RequireContext_MemberName">
+            <summary>
+              查找类似 Member Name: {0} 的本地化字符串。
+            </summary>
+        </member>
+        <member name="P:Coroutines.Resource1.NotEmptyConstruector">
+            <summary>
+              查找类似 Type &lt;{0}&gt; Not Public Empty Parameter Construector 的本地化字符串。
+            </summary>
+        </member>
+        <member name="P:Coroutines.Resource1.Scheduler_NotDefault">
+            <summary>
+              查找类似 Not Default Coroutine Scheduler 的本地化字符串。
+            </summary>
+        </member>
+        <member name="T:Coroutines.SyncCoroutine">
+             <summary>
+             <see cref="T:Coroutines.Coroutine"/> 同步
+             <see cref="T:Coroutines.Coroutine"/> sync
+             </summary>
+             <example>
+             repeat invoke 3 
+             no use <see cref="T:Coroutines.SyncCoroutine"/> result: '000111222'
+             use <see cref="T:Coroutines.SyncCoroutine"/> result: '012012012'
+             <code>
+             IEnumerator TestSyncCoroutine(StringBuilder sb, SyncCoroutine syncObj){
+                 using (var l = syncObj.Lock()){
+                     yield return l;
+                     for (int i = 0; i &lt; 3; i++){
+                         sb.Append(i);
+                         yield return null;
+                     }
+                }
+              }
+             </code>
+            </example>
+        </member>
+        <member name="T:Coroutines.YieldReturn">
+            <summary>
+            coroutine return value, euqal two command, yield return and yield break
+            </summary>
+            <example>
+            <code>
+            yield return new YieldReturn(...);
+            </code>
+            </example>
+        </member>
+        <member name="P:Coroutines.YieldReturn.Value">
+            <summary>
+            
+            </summary>
+            <exception cref="T:Coroutines.CoroutineNotReturnValueException"/>
+        </member>
+        <member name="T:Coroutines.Threading.ThreadCoroutineData">
+            <summary>
+            协同程序数据
+            coroutine data
+            </summary>
+        </member>
+        <member name="F:Coroutines.Threading.ThreadCoroutineFlags.Started">
+            <summary>
+            已经运行的
+            </summary>
+        </member>
+        <member name="F:Coroutines.Threading.ThreadCoroutineFlags.DoneFlags">
+            <summary>
+            结束
+            </summary>
+        </member>
+        <member name="F:Coroutines.Threading.ThreadCoroutineFlags.Completed">
+            <summary>
+            正常执行结束的
+            </summary>
+        </member>
+        <member name="F:Coroutines.Threading.ThreadCoroutineFlags.Canceled">
+            <summary>
+            取消来结束的，只有运行前可以取消
+            </summary>
+        </member>
+        <member name="F:Coroutines.Threading.ThreadCoroutineFlags.Stopped">
+            <summary>
+            强制停止结束的
+            </summary>
+        </member>
+        <member name="F:Coroutines.Threading.ThreadCoroutineFlags.Faulted">
+            <summary>
+            因为处理异常而结束的
+            </summary>
+        </member>
+        <member name="F:Coroutines.Threading.ThreadCoroutineFlags.Result">
+            <summary>
+            带有返回值
+            </summary>
+        </member>
+        <member name="P:Coroutines.Threading.ThreadCoroutineScheduler.FrameCount">
+            <summary>
+            Update Frame Count
+            </summary>
+        </member>
+        <member name="P:Coroutines.Threading.ThreadCoroutineScheduler.HasCoroutine">
+            <summary>
+            帧间隔时间
+            frame delta time
+            </summary>
+        </member>
+        <member name="P:Coroutines.Threading.ThreadCoroutineScheduler.ThreadId">
+            <summary>
+            attached thread id
+            </summary>
+        </member>
+        <member name="P:Coroutines.Threading.ThreadCoroutineScheduler.IsThreadSafe">
+            <summary>
+            线程是否安全的, thread is safe
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Threading.ThreadCoroutineScheduler.AddCoroutineSafeQueue(Coroutines.Threading.ThreadCoroutineData)">
+            <summary>
+            添加协同程序到线程安全的序列
+            </summary>
+            <param name="coroutine"></param>
+        </member>
+        <member name="M:Coroutines.Threading.ThreadCoroutineScheduler.CanCancel(Coroutines.Threading.ThreadCoroutineData)">
+            <summary>
+            任务是否可以取消
+            </summary>
+            <param name="coroutine"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Threading.ThreadCoroutineScheduler.Cancel(Coroutines.Threading.ThreadCoroutineData)">
+            <summary>
+            Post时支持
+            </summary>
+            <param name="coroutine"></param>
+        </member>
+        <member name="M:Coroutines.Threading.ThreadCoroutineScheduler.Stop(Coroutines.Threading.ThreadCoroutineData)">
+            <summary>
+            强制终止运行，不推荐使用
+            </summary>
+            <param name="coroutine"></param>
+        </member>
+        <member name="M:Coroutines.CoroutineAggregateException.Flatten">
+            <summary>
+            all next exceptions to InnerExceptions
+            </summary>
+            <returns></returns>
+        </member>
+        <member name="T:Coroutines.CancellationToken">
+            <summary>
+            <see  cref="P:Coroutines.CancellationTokenSource.Token"/>
+            </summary>
+        </member>
+        <member name="P:Coroutines.CancellationToken.CanBeCanceled">
+            <summary>
+            获取此标记是否能处于已取消状态
+            </summary>
+        </member>
+        <member name="P:Coroutines.CancellationToken.IsCancellationRequested">
+            <summary>
+            获取是否已请求取消此标记。
+            </summary>
+        </member>
+        <member name="M:Coroutines.CancellationToken.ThrowIfCancellationRequested">
+            <summary>
+            如果已请求取消此标记，则引发 OperationCanceledException
+            </summary>
+            <exception cref="T:System.OperationCanceledException"/>
+        </member>
+        <member name="M:Coroutines.CancellationToken.Register(System.Action)">
+            <summary>
+            
+            </summary>
+            <param name="callback"></param>
+            <returns></returns>
+            <exception cref="T:System.ObjectDisposedException" >CancellationTokenSource Disposed</exception>
+        </member>
+        <member name="M:Coroutines.CancellationToken.Register(System.Action{System.Object},System.Object)">
+            <summary>
+            
+            </summary>
+            <param name="callback"></param>
+            <param name="state"></param>
+            <returns></returns>
+            <exception cref="T:System.ObjectDisposedException" >CancellationTokenSource Disposed</exception>
+        </member>
+        <member name="T:Coroutines.Task">
+            <summary>
+            see https://msdn.microsoft.com/library/system.threading.tasks.task.aspx
+            if task is started ,can't canceled.
+            </summary>
+        </member>
+        <member name="P:Coroutines.Task.Status">
+            <summary>
+            任务状态
+            <para>Task Status</para>
+            </summary>
+        </member>
+        <member name="P:Coroutines.Task.UserData">
+            <summary>
+            状态数据
+            </summary>
+        </member>
+        <member name="P:Coroutines.Task.Exception">
+            <summary>
+            未处理异常
+            <para>Task Exception</para>
+            </summary>
+        </member>
+        <member name="P:Coroutines.Task.IsCompleted">
+            <summary>
+            是否已完成。包含RanToCompletion、Faulted或Canceled三个状态之一。
+            <para>Whether you have completed. Contains the RanToCompletion, Faulted, or Canceled one of the three States.</para>
+            </summary>
+        </member>
+        <member name="P:Coroutines.Task.IsCanceled">
+            <summary>
+            <see cref="P:Coroutines.Task.Status"/> 为 <see cref="F:Coroutines.TaskStatus.Canceled"/>, 原因 <see cref="M:Coroutines.CancellationTokenSource.Cancel"/>
+            <para><see cref="P:Coroutines.Task.Status"/> is <see cref="F:Coroutines.TaskStatus.Canceled"/>, reson <see cref="M:Coroutines.CancellationTokenSource.Cancel"/></para>
+            </summary>
+        </member>
+        <member name="P:Coroutines.Task.IsFaulted">
+            <summary>
+            <see cref="P:Coroutines.Task.Status"/> 为 <see cref="F:Coroutines.TaskStatus.Faulted"/>, 对应的异常信息 <see cref="P:Coroutines.Task.Exception"/>
+            <para><see cref="P:Coroutines.Task.Status"/> is <see cref="F:Coroutines.TaskStatus.Canceled"/>, exception details <see cref="P:Coroutines.Task.Exception"/></para>
+            </summary>
+        </member>
+        <member name="P:Coroutines.Task.IsRanToCompletion">
+            <summary>
+            <see cref="P:Coroutines.Task.Status"/> 为 <see cref="F:Coroutines.TaskStatus.RanToCompletion"/>
+            <para><see cref="P:Coroutines.Task.Status"/> is <see cref="F:Coroutines.TaskStatus.RanToCompletion"/></para>
+            </summary>
+        </member>
+        <member name="M:Coroutines.Task.Start">
+            <summary>
+            执行任务
+            start task
+            </summary>
+        </member>
+        <member name="M:Coroutines.Task.Start(Coroutines.CoroutineScheduler)">
+            <summary>
+            执行任务
+            start task
+            </summary>
+            <param name="scheduler">指定调度程序</param>
+        </member>
+        <member name="M:Coroutines.Task.Wait">
+            <summary>
+            use only  in routine method, if task not run the infinite wait
+            </summary>        
+            <returns></returns>
+            <example>
+            <code> 
+            yield return task.Wait();
+            </code>
+            </example> 
+            <exception cref="T:Coroutines.CoroutineAggregateException"/>
+        </member>
+        <member name="M:Coroutines.Task.Wait(Coroutines.CancellationToken)">
+            <summary>
+            
+            </summary>
+            <param name="cancellationToken"></param>
+            <returns></returns>
+            <exception cref="T:Coroutines.CoroutineAggregateException"/>
+        </member>
+        <member name="M:Coroutines.Task.Wait(System.Int32)">
+            <summary>
+            millisecondsTimeout:-1 infinite wait
+            </summary>
+            <param name="millisecondsTimeout"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Task.Wait(System.Int32,Coroutines.CancellationToken)">
+            <summary>
+            
+            </summary>
+            <param name="millisecondsTimeout"></param>
+            <param name="cancellationToken"></param>
+            <returns></returns>
+            <exception cref="T:Coroutines.CoroutineAggregateException"/>
+        </member>
+        <member name="M:Coroutines.Task.ThrowIfCanceled">
+            <summary>
+            if <see cref="F:Coroutines.TaskStatus.Canceled"/> throws <see cref="T:Coroutines.TaskCanceledException"/>
+            </summary>
+            <exception cref="T:System.OperationCanceledException"/>
+        </member>
+        <member name="M:Coroutines.Task.ThrowIfFaulted">
+            <summary>
+            if <see cref="F:Coroutines.TaskStatus.Faulted"/> throws <see cref="P:Coroutines.Task.Exception"/>, if <see cref="F:Coroutines.TaskStatus.Canceled"/>  throws <see cref="T:Coroutines.TaskCanceledException"/>
+            </summary>
+        </member>
+        <member name="M:Coroutines.Task.ContinueWith(System.Collections.IEnumerator,Coroutines.CancellationToken)">
+            <summary>
+            Continue With Task
+            </summary> 
+        </member>
+        <member name="M:Coroutines.Task.Delay(System.Int32)">
+            <summary>
+            延迟任务, <paramref name="milliseconds"/>为-1，则无限等待。
+            delay task, <paramref name="milliseconds"/> Is -1, then to wait indefinitely.
+            </summary>
+            <param name="milliseconds"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Task.WaitAll(Coroutines.Task[])">
+            <summary>
+            infinite wait all task complete
+            </summary>
+            <param name="tasks"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Task.WaitAll(Coroutines.Task[],Coroutines.CancellationToken)">
+            <summary>
+            
+            </summary>
+            <param name="tasks"></param>
+            <param name="cancellationToken">external cancel wait </param>
+        </member>
+        <member name="M:Coroutines.Task.WaitAll(Coroutines.Task[],System.Int32,Coroutines.CancellationToken)">
+            <summary>
+            
+            </summary>
+            <param name="tasks"></param>
+            <param name="millisecondsTimeout"></param>
+            <returns>in time  all task no error complete return true</returns> 
+        </member>
+        <member name="M:Coroutines.Task.WaitAny(Coroutines.Task[])">
+            <summary>
+            infinite wait any task complete
+            </summary>
+            <param name="tasks"></param>
+            <returns></returns>
+        </member>
+        <member name="M:Coroutines.Task.WaitAny(Coroutines.Task[],Coroutines.CancellationToken)">
+            <summary>
+            
+            </summary>
+            <param name="tasks"></param>
+            <param name="cancellationToken">external cancel wait </param>
+        </member>
+        <member name="M:Coroutines.Task.WaitAny(Coroutines.Task[],System.Int32)">
+            <summary>
+            
+            </summary>
+            <param name="tasks"></param>
+            <param name="millisecondsTimeout"></param>
+            <returns>timeout or error return false</returns>
+        </member>
+        <member name="T:Coroutines.TaskCanceledException">
+            <summary>
+            routine canceled
+            </summary>
+        </member>
+        <member name="T:Coroutines.TaskContinuationOptions">
+            <summary>
+            延续任务的选项
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskContinuationOptions.NotOnRanToCompletion">
+            <summary>
+            前置任务没有成功执行才执行此任务
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskContinuationOptions.NotOnFaulted">
+            <summary>
+            前置任务没有失败才执行此任务
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskContinuationOptions.NotOnCanceled">
+            <summary>
+            前置任务没有被取消才执行此任务
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskContinuationOptions.OnlyOnRanToCompletion">
+            <summary>
+            前置任务成功后才执行此任务
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskContinuationOptions.OnlyOnFaulted">
+            <summary>
+            前置任务失败后才执行此任务
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskContinuationOptions.OnlyOnCanceled">
+            <summary>
+            前置任务被取消后才执行此任务
+            </summary>
+        </member>
+        <member name="T:Coroutines.TaskStatus">
+            <summary>
+            任务的状态
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskStatus.Created">
+            <summary>
+            任务已初始化，尚未执行
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskStatus.WaitingForActivation">
+            <summary>
+            等待被激活
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskStatus.WaitingToRun">
+            <summary>
+            该任务已被计划执行，但尚未开始执行
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskStatus.Running">
+            <summary>
+            该任务正在运行，但尚未完成
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskStatus.WaitingForChildrenToComplete">
+            <summary>
+            该任务已完成执行，正在隐式等待附加的子任务完成
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskStatus.Canceled">
+            <summary>
+            任务被取消
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskStatus.Faulted">
+            <summary>
+            任务发生异常，执行失败
+            </summary>
+        </member>
+        <member name="F:Coroutines.TaskStatus.RanToCompletion">
+            <summary>
+            已成功完成执行
+            </summary>
+        </member>
+        <!-- Badly formed XML comment ignored for member "T:Coroutines.Task`1" -->
+        <member name="P:Coroutines.Task`1.Result">
+            <summary>
+            
+            </summary>
+            <exception cref="T:Coroutines.CoroutineAggregateException"/>
+            <exception cref="T:Coroutines.TaskCanceledException"/>
+        </member>
+        <member name="T:Coroutines.WaitForFrame">
+            <summary>
+            等待一帧
+            wait one frame
+            </summary>
+            <example>
+            <code>
+            yield return null; // null, one frame, recommend
+            or
+            yield return new WaitForFrame(2); //two frame
+            </code>
+            </example>
+        </member>
+        <member name="T:Coroutines.WaitForManual">
+            <summary>
+            manual set <see cref="M:Coroutines.WaitForManual.Done"/>
+            </summary>
+        </member>
+        <member name="T:Coroutines.WaitForMilliseconds">
+            <summary>
+            延迟时间, 单位(毫秒)
+            delay, wait for milliseconds
+            </summary>
+            <example>
+            <code>
+            yield return new WaitForMilliseconds(...);
+            </code>
+            </example>
+        </member>
+        <member name="T:System.WeakTable`2">
+            <summary>
+            
+            </summary>
+        </member>
+    </members>
+</doc>

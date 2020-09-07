@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d57c46ddcce052445a6b0a34bc054d1a, type: 3}
+  m_Name: addressable
+  m_EditorClassIdentifier: 
+  assets:
+  - assetName: Assets/Example/Src/Sphere
+    guid: 3e315688b640fc542944b44078cad31e
+    bundleName: local/assets/example/bundle_src
+  - assetName: Assets/Example/Src/Cube
+    guid: 559393bbb0883ee409e34c9a62a937cd
+    bundleName: local/assets/example/bundle_src

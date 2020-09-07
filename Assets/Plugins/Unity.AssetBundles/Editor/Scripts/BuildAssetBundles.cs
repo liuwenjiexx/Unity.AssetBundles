@@ -2,39 +2,42 @@ using Microsoft.CSharp;
 using System;
 using System.CodeDom.Compiler;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.StringFormats;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using Template.Xslt;
+using UnityEditor.Build.Internal;
 using UnityEditor.Callbacks;
 using UnityEngine;
 
-
-namespace UnityEditor.Build.AssetBundle
+namespace UnityEditor.Build
 {
 
     public sealed class BuildAssetBundles
     {
-
-
         private static string packageDir;
-        private static string ConfigFilePath = "ProjectSettings/AssetBundleConfig.json";
-        private const string MenuPrefix = "Build/AssetBundle/";
+        internal static string ConfigFilePath = "ProjectSettings/AssetBundle.json";
+        public static string LocalGroupName
+        {
+            get
+            {
+                if (!EditorAssetBundleSettings.LocalGroup)
+                    return AssetBundleSettings.LocalGroupName;
+                return EditorAssetBundleSettings.LocalGroup.Asset.name.ToLower();
+            }
+        }
+        public static string AutoDependencyAssetBundleName { get => LocalGroupName + "/auto/auto"; }
 
-
-        private static BuildAssetBundleConfig config;
+        private static EditorAssetBundleSettings config;
         private static DateTime lastConfigWriteTime;
 
         private const string FormatArg_BuildTarget = "BuildTarget";
-        private const string FormatArg_Platform = "Platform";
-        private const string FormatArg_Directory = "Directory";
-        private const string FormatArg_FileName = "FileName";
-        private const string FormatArg_FileExtension = "FileExtension";
-        private const string FormatArg_AssetName = "AssetName";
         private const string FormatArg_AssetPath = "AssetPath";
+        internal const string PackageName = "unity.assetbundles";
 
         public static string PackageDir
         {
@@ -42,7 +45,7 @@ namespace UnityEditor.Build.AssetBundle
             {
                 if (string.IsNullOrEmpty(packageDir))
                 {
-                    packageDir = GetPackageDirectory("Unity.Assetbundles");
+                    packageDir = GetPackageDirectory(PackageName);
                 }
                 return packageDir;
             }
@@ -68,27 +71,43 @@ namespace UnityEditor.Build.AssetBundle
         }
 
 
-        public static BuildAssetBundleConfig Config
+        /// PlayerPrefs Key: [UnityEditor.BuildPlayer.AssetBundleManifestPath]
+        /// <summary>
+        /// 带 .manifest
+        /// </summary>
+        public static string BuildAssetBundleManifestPath
         {
-            get
+            get { return PlayerPrefs.GetString("UnityEditor.BuildPlayer.AssetBundleManifestPath", null); }
+            set
             {
-                LoadConfig();
-                return config;
+                if (BuildAssetBundleManifestPath != value)
+                {
+                    PlayerPrefs.SetString("UnityEditor.BuildPlayer.AssetBundleManifestPath", value);
+                    PlayerPrefs.Save();
+                }
             }
+        }
+
+        public const string BuildLogPrefix = "[Build AssetBundle] ";
+
+
+        public static string PlatformName
+        {
+            get => GetPlatformName();
         }
 
         private static string GetPackageDirectory(string packageName)
         {
-            foreach (var dir in Directory.GetDirectories("Assets", "*", SearchOption.AllDirectories))
+            foreach (var dir in Directory.GetDirectories("Assets", packageName, SearchOption.AllDirectories))
             {
-                if (string.Equals(Path.GetFileName(dir), packageName, StringComparison.InvariantCultureIgnoreCase))
+                if (File.Exists(Path.Combine(dir, "package.json")))
                 {
                     return dir;
                 }
             }
 
             string path = Path.Combine("Packages", packageName);
-            if (Directory.Exists(path))
+            if (File.Exists(Path.Combine(path, "package.json")))
             {
                 return path;
             }
@@ -96,126 +115,152 @@ namespace UnityEditor.Build.AssetBundle
             return null;
         }
 
-        [OnEditorApplicationOpen]
-        static void OnEditorApplicationOpen()
+        [OnEditorApplicationStartup(1)]
+        static void OnEditorApplicationStartup()
         {
-
             string filePath = Path.GetFullPath(ConfigFilePath);
 
             if (File.Exists(filePath))
             {
                 UpdateAllAssetBundleNames();
             }
-        }
 
+            addressableDiry = true;
+        }
+        static bool addressableDiry
+        {
+            get
+            {
+                return PlayerPrefs.HasKey("AddressableDiry");
+            }
+            set
+            {
+                if (value != addressableDiry)
+                {
+                    if (value)
+                        PlayerPrefs.SetInt("AddressableDiry", 1);
+                    else
+                        PlayerPrefs.DeleteKey("AddressableDiry");
+                    PlayerPrefs.Save();
+                }
+            }
+        }
         [InitializeOnLoadMethod]
         static void InitializeOnLoadMethod()
         {
+            //修改配置时很卡
+            //string filePath = Path.GetFullPath(ConfigFilePath);
 
-            string filePath = Path.GetFullPath(ConfigFilePath);
-
-            if (File.Exists(filePath))
+            //if (File.Exists(filePath))
+            //{
+            //    FileSystemWatcher fsw = new FileSystemWatcher();
+            //    fsw.Path = Path.GetDirectoryName(filePath);
+            //    fsw.Filter = Path.GetFileName(filePath);
+            //    fsw.NotifyFilter = NotifyFilters.LastWrite;
+            //    fsw.Changed += OnFileSystemWatcher;
+            //    fsw.IncludeSubdirectories = false;
+            //    fsw.EnableRaisingEvents = true;
+            //}
+            if (true)
             {
-                FileSystemWatcher fsw = new FileSystemWatcher();
-                fsw.Path = Path.GetDirectoryName(filePath);
-                fsw.Filter = Path.GetFileName(filePath);
+                FileSystemWatcher fsw = new FileSystemWatcher(Path.GetFullPath("Assets"), "*.meta");
                 fsw.NotifyFilter = NotifyFilters.LastWrite;
-                fsw.Changed += OnFileSystemWatcher;
+                fsw.Changed += (o, e) =>
+                {
+                    EditorApplication.delayCall += () =>
+                    {
+                        addressableDiry = true;
+                    };
+                };
+                fsw.IncludeSubdirectories = true;
                 fsw.EnableRaisingEvents = true;
             }
         }
-
-        static void OnFileSystemWatcher(object sender, FileSystemEventArgs e)
+        [RuntimeInitializeOnLoadMethod]
+        static void RuntimeInitializeOnLoadMethod()
         {
-            if (File.Exists(e.FullPath))
+            if (addressableDiry)
             {
-                EditorApplication.delayCall += () =>
-                {
-                    config = null;
-                    LoadConfig();
-                    UpdateAllAssetBundleNames();
-                };
+                addressableDiry = false;
+                DateTime startTime = DateTime.Now;
+                var list = LoadAllAssetBundleList();
+                CreateAddressableAsset(list);
+                addressableDiry = false;
+                Debug.Log(BuildLogPrefix + $"Build addressable time: {(DateTime.Now - startTime).TotalSeconds.ToString("0.#")}s");
             }
         }
+        //static void OnFileSystemWatcher(object sender, FileSystemEventArgs e)
+        //{
+        //    if (File.Exists(e.FullPath))
+        //    {
+        //        EditorApplication.delayCall += () =>
+        //        {
+        //            if (ignoreLoad)
+        //            {
+        //                ignoreLoad = false;
+        //                return;
+        //            }
+        //            config = null;
+        //            LoadConfig();
+        //            UpdateAllAssetBundleNames();
+        //        };
+        //    }
+        //}
 
-
-        //[MenuItem("Assets/Add AssetBundle")]
-        public static void AddBuildAssetBundles()
-        {
-
-            string[] dirs = GetSelectedDirections();
-
-            bool changed = false;
-
-            foreach (var dir in dirs)
-            {
-                var item = Config.Items.Where(o => PathEqual(o.Directory, dir))
-                    .FirstOrDefault();
-                if (item == null)
-                {
-                    item = new BuildAssetBundleItem()
-                    {
-                        Directory = dir,
-                    };
-                    Config.Items.Add(item);
-                    changed = true;
-                }
-            }
-            if (changed)
-            {
-                SaveConfig();
-            }
-
-        }
-
-
-        //[MenuItem("Assets/Add AssetBundle", validate = true)]
-        public static bool AddBuildAssetBundles_Validate()
-        {
-            var dirs = GetSelectedDirections();
-            if (dirs.Length == 0)
-                return false;
-
-            bool changed = false;
-
-            foreach (var dir in dirs)
-            {
-                var item = Config.Items.Where(o => PathEqual(o.Directory, dir))
-                    .FirstOrDefault();
-                if (item == null)
-                {
-                    changed = true;
-                    break;
-                }
-            }
-            return changed;
-        }
-
-        private static Dictionary<string, object> GetFormatValues(string filePath)
+        private static Dictionary<string, object> GetFormatArgsWithFilePath(string filePath)
         {
             Dictionary<string, object> values = new Dictionary<string, object>();
             GetFormatValues(filePath, values);
             return values;
         }
 
-        private static void GetFormatValues(string filePath, Dictionary<string, object> values)
+
+        public static InitializeFormatValuesDelegate InitializeFormatValues;
+        public delegate void InitializeFormatValuesDelegate(string filePath, Dictionary<string, object> values);
+        public static void GetFormatValues(string assetPath, Dictionary<string, object> values)
         {
             var buildTarget = EditorUserBuildSettings.activeBuildTarget;
 
             values[FormatArg_BuildTarget] = buildTarget.ToString();
-            values[FormatArg_Platform] = GetPlatformName(buildTarget);
-
-            if (!string.IsNullOrEmpty(filePath))
-            {
-                values[FormatArg_Directory] = Path.GetFileName(Path.GetDirectoryName(filePath));
-                values[FormatArg_FileName] = Path.GetFileName(filePath);
-                values[FormatArg_FileExtension] = Path.GetExtension(filePath);
-                values[FormatArg_AssetName] = Path.GetFileNameWithoutExtension(filePath);
-                values[FormatArg_AssetPath] = filePath;
-            };
+            values[AssetBundles.FormatArg_Platform] = GetPlatformName(buildTarget);
+            values[AssetBundles.FormatArg_AppVersion] = GetAppVersion();
+            values[AssetBundles.FormatArg_Channel] = AssetBundleSettings.Channel;
+            values[AssetBundles.FormatArg_BundleVersion] = AssetBundleSettings.BundleVersion;
+            GetFormatValuesWithAssetPath(values, assetPath);
+        }
+        public static void GetFormatValues(Dictionary<string, object> values)
+        {
+            GetFormatValues(null, values);
         }
 
-        private static string GetFormatString(string input, string filePath = null, Dictionary<string, object> values = null)
+        public static void GetFormatValuesWithAssetPath(Dictionary<string, object> values, string assetPath)
+        {
+            values[FormatArg_AssetPath] = assetPath;
+            if (InitializeFormatValues != null)
+                InitializeFormatValues(assetPath, values);
+        }
+        public static void GetFormatValues(Dictionary<string, object> values, AssetBundleVersion version)
+        {
+            var buildTarget = EditorUserBuildSettings.activeBuildTarget;
+
+            values[FormatArg_BuildTarget] = buildTarget.ToString();
+            values[AssetBundles.FormatArg_Platform] = version.platform;
+            values[AssetBundles.FormatArg_AppVersion] = version.appVersion;
+            values[AssetBundles.FormatArg_Channel] = version.channel;
+            values[AssetBundles.FormatArg_BundleVersion] = version.bundleVersion;
+        }
+
+        interface IFormatValueProvider
+        {
+            string GetValue(string key);
+        }
+
+
+        public static string FormatString(string input, Dictionary<string, object> values = null)
+        {
+            return FormatString(input, null, values);
+        }
+        public static string FormatString(string input, string filePath, Dictionary<string, object> values = null)
         {
             if (string.IsNullOrEmpty(input))
                 return input;
@@ -224,15 +269,21 @@ namespace UnityEditor.Build.AssetBundle
                 values = new Dictionary<string, object>();
                 GetFormatValues(filePath, values);
             }
-            input = FormatString(input, StringRegexFormatProvider.Instance, values);
-
+            try
+            {
+                input = input.FormatStringWithKey(values);
+            }
+            catch (Exception ex)
+            {
+                throw ex;
+            }
             return input;
         }
         private static string GetFormatString(string input, Dictionary<string, object> values)
         {
             if (string.IsNullOrEmpty(input))
                 return input;
-            input = FormatString(input, StringRegexFormatProvider.Instance, values);
+            input = input.FormatStringWithKey(values);
 
             return input;
         }
@@ -262,87 +313,39 @@ namespace UnityEditor.Build.AssetBundle
             }
             return name;
         }
-        [MenuItem(MenuPrefix + "Remove Unused AssetBundle Names")]
-        public static void RemoveUnusedAssetBundleNames()
-        {
-            AssetDatabase.RemoveUnusedAssetBundleNames();
-        }
-        //[MenuItem("Assets/Remove AssetBundle")]
-        public static void RemoveBuildAssetBundles()
-        {
 
-            string[] dirs = GetSelectedDirections();
-            bool changed = false;
-
-            foreach (var dir in dirs)
-            {
-                var item = Config.Items.Where(o => PathEqual(o.Directory, dir))
-                    .FirstOrDefault();
-                if (item != null)
-                {
-                    Config.Items.Remove(item);
-                    changed = true;
-                }
-            }
-            if (changed)
-            {
-                SaveConfig();
-            }
+        public static string GetPlatformName()
+        {
+            BuildTarget buildTarget = EditorUserBuildSettings.activeBuildTarget;
+            return GetPlatformName(buildTarget);
         }
 
 
-        //[MenuItem("Assets/Remove AssetBundle", validate = true)]
-        public static bool RemoveBuildAssetBundles_Validate()
-        {
-            string[] dirs = GetSelectedDirections();
-            if (dirs.Length == 0)
-                return false;
-            bool changed = false;
-
-            foreach (var dir in dirs)
-            {
-                var item = Config.Items.Where(o => PathEqual(o.Directory, dir))
-                    .FirstOrDefault();
-                if (item != null)
-                {
-                    changed = true;
-                    break;
-                }
-            }
-            return changed;
-        }
-
-        [MenuItem(MenuPrefix + "Build", priority = 0)]
+        [MenuItem(EditorAssetBundles.MenuPrefix + "Build", priority = EditorAssetBundles.BuildMenuPriority)]
         public static void Build()
         {
-            var buildTarget = EditorUserBuildSettings.activeBuildTarget;
-            string outputPath = GetOutputPath();
+            //var buildTarget = EditorUserBuildSettings.activeBuildTarget;
+            //string outputPath = GetNextOutputPath();
 
-            Build(outputPath);
+            Build(null);
 
-            string copyPath = GetCopyToPath();
-            if (!string.IsNullOrEmpty(copyPath))
-            {
-                CopyDirectory(outputPath, copyPath);
-                Debug.LogFormat("copy AssetBundles\nsrc:{0}\ndst:{1}", outputPath, copyPath);
-            }
+            //string copyPath = GetCopyToPath();
+            //if (!string.IsNullOrEmpty(copyPath))
+            //{
+            //    CopyDirectory(outputPath, copyPath);
+            //    Debug.LogFormat("copy AssetBundles\nsrc:{0}\ndst:{1}", outputPath, copyPath);
+            //}
         }
 
-
-        [MenuItem(MenuPrefix + "Open Output Path", priority = 2)]
-        public static void OpenOutputPath()
+        [MenuItem("Build/Build AssetBundle", priority = 1)]
+        public static void Build2()
         {
-            string outputPath = GetOutputPath();
-            EditorUtility.RevealInFinder(outputPath);
-        }
-        [MenuItem(MenuPrefix + "Edit Config", priority = 1)]
-        public static void OpenConfigFile()
-        {
-            EditorUtility.OpenWithDefaultApp(ConfigFilePath);
+            //string outputPath = GetNextOutputPath();
+            Build();
         }
 
 
-        [MenuItem(MenuPrefix + "ListAssetBundle", priority = 3)]
+        //   [MenuItem(MenuPrefix + "ListAssetBundle", priority = 3)]
         public static void ListAssetBundle()
         {
 
@@ -357,13 +360,6 @@ namespace UnityEditor.Build.AssetBundle
             }
             Debug.Log(Selection.objects.Length);
 
-            //foreach (var abName in AssetDatabase.GetAllAssetBundleNames())
-            //{
-            //    foreach (var assetPath in AssetDatabase.GetAssetPathsFromAssetBundle(abName))
-            //    {
-
-            //    }
-            //}
         }
 
         //[MenuItem(MenuPrefix + "Clear All Directory AssetBundleName", priority = 3)]
@@ -381,57 +377,414 @@ namespace UnityEditor.Build.AssetBundle
                 }
             }
         }
+        //public static AssetBundleVersion[] FindAllVersionList()
+        //{
+        //    List<AssetBundleVersion> list = new List<AssetBundleVersion>();
+        //    foreach (var file in Directory.GetFiles(GetBaseOutputPath(), AssetBundleSettings.VersionFile, SearchOption.AllDirectories))
+        //    {
+        //        try
+        //        {
+        //            var tmp = JsonUtility.FromJson<AssetBundleVersion>(File.ReadAllText(file, Encoding.UTF8));
+        //            if (tmp != null)
+        //            {
+        //                list.Add(tmp);
+        //            }
+        //        }
+        //        catch { }
+        //    }
+        //    return list.ToArray();
+        //}
+
+        //public static AssetBundleVersion FindLastestVersion()
+        //{
+        //    var versions = FindAllVersionList();
+        //    AssetBundleVersion lastestVersion;
+        //    lastestVersion = AssetBundleVersion.GetLatestVersionList(versions, GetPlatformName(), GetAppVersion());
+        //    if (lastestVersion == null)
+        //        lastestVersion = AssetBundleVersion.GetLatestVersionList(versions, GetPlatformName(), null);
+        //    return lastestVersion;
+        //}
+        //public static AssetBundleVersion FindLastestPlatformVersion()
+        //{
+        //    var versions = FindAllVersionList();
+        //    AssetBundleVersion lastestVersion;
+        //    lastestVersion = AssetBundleVersion.GetLatestVersionList(versions, GetPlatformName(), null);
+        //    return lastestVersion;
+        //}
 
         public static string GetOutputPath()
         {
-            var buildTarget = EditorUserBuildSettings.activeBuildTarget;
-            string outputPath = Config.OutputPath;
+            //string path;
+            //var lastest = FindLastestVersion();
+            //if (lastest != null)
+            //    path = GetOutputPath(lastest);
+            //else
+            //{
+            //    path = GetOutputPath(null);
+            //}
+            //return path;
+            string outputPath = AssetBundleSettings.BuildManifestPath;
+            outputPath = FormatString(outputPath);
+            outputPath = Path.GetDirectoryName(outputPath);
             if (string.IsNullOrEmpty(outputPath))
                 throw new Exception("OutputPath empty");
-            outputPath = GetFormatString(outputPath);
+
             return outputPath;
         }
-        public static string GetCopyToPath()
-        {
-            string path = Config.CopyTo;
-            if (!string.IsNullOrEmpty(path))
-                path = GetFormatString(path);
+        //public static string GetNextOutputPath()
+        //{
+        //    var list = FindAllVersionList();
+        //    AssetBundleVersion lastestVersion;
 
+        //    //lastestVersion = AssetBundleVersion.GetLatestVersionList(list, GetPlatformName(), GetAppVersion());
+
+        //    //if (lastestVersion == null)
+        //    lastestVersion = AssetBundleVersion.GetLatestVersionList(list, GetPlatformName(), null);
+        //    if (lastestVersion != null)
+        //    {
+        //        lastestVersion.appVersion = GetAppVersion();
+        //        lastestVersion.bundleCode++;
+        //    }
+        //    else
+        //    {
+        //        lastestVersion = new AssetBundleVersion();
+        //        lastestVersion.appVersion = GetAppVersion();
+        //        lastestVersion.bundleCode = 1;
+        //    }
+        //    string outputPath = GetOutputPath(lastestVersion);
+        //    return outputPath;
+        //}
+
+        public static string GetAppVersion()
+        {
+            //string appVersion = Application.version;
+            //if (!string.IsNullOrEmpty(AssetBundleSettings.AppVersionFormat))
+            //    appVersion = string.Format(AssetBundleSettings.AppVersionFormat, appVersion.Split('.'));
+            //return appVersion;
+            return AssetBundles.AppVersion;
+        }
+
+        //public static string GetBaseOutputPath()
+        //{
+        //    var buildTarget = EditorUserBuildSettings.activeBuildTarget;
+        //    string outputPath = AssetBundleSettings.BuildPath;
+        //    outputPath = FormatString(outputPath);
+        //    if (string.IsNullOrEmpty(outputPath))
+        //        throw new Exception("OutputPath empty");
+        //    return outputPath;
+        //}
+
+        //public static string GetOutputPath(AssetBundleVersion version)
+        //{
+        //    string outputPath = GetBaseOutputPath();
+        //    Dictionary<string, object> values = new Dictionary<string, object>();
+        //    GetFormatValues(null, values);
+        //    if (version != null)
+        //    {
+        //        AssetBundles.GetFormatArgsWithVersion(ref values, version);
+        //    }
+        //    outputPath = FormatString(outputPath, values);
+        //    outputPath = Path.Combine(outputPath, FormatString(AssetBundleSettings.ManifestPath, values));
+        //    return outputPath;
+        //}
+
+
+
+        public static string GetStreamingAssetsPath()
+        {
+            string path;
+            path = FormatString(AssetBundleSettings.StreamingAssetsManifestPath);
+            if (string.IsNullOrEmpty(path))
+                return null;
+            path = Path.GetDirectoryName(path);
+            path = Path.Combine("Assets/StreamingAssets", path);
             return path;
         }
-        public static string GetBuildCopyToPath()
-        {
-            string path = Config.BuildCopyTo;
-            if (!string.IsNullOrEmpty(path))
-                path = GetFormatString(path);
 
-            return path;
-        }
+
+        //public static string GetVersionListPath()
+        //{
+        //    string outputPath = GetBaseOutputPath();
+        //    outputPath = FormatString(outputPath);
+        //    return Path.Combine(outputPath, FormatString(AssetBundleSettings.RootVersionFile));
+        //}
+
+        //public static string GetRootVersionPath(AssetBundleVersion version)
+        //{
+        //    string outputPath = GetBaseOutputPath();
+        //    Dictionary<string, object> values = new Dictionary<string, object>();
+        //    GetFormatValues(null, values);
+        //    AssetBundles.GetFormatArgsWithVersion(ref values, version);
+        //    outputPath = outputPath.FormatStringWithKey(values);
+        //    return Path.Combine(outputPath, AssetBundleSettings.RootVersionFile.FormatStringWithKey(values));
+        //}
 
 
         public static void Build(string outputPath)
         {
 
             if (string.IsNullOrEmpty(outputPath))
+            {
+                outputPath = GetOutputPath();
+            }
+            if (string.IsNullOrEmpty(outputPath))
                 throw new ArgumentException("outputPath empty");
+            outputPath = outputPath.Replace('\\', '/');
+            if (outputPath[outputPath.Length - 1] == '/')
+                outputPath = outputPath.Substring(0, outputPath.Length - 1);
+
 
             BuildTarget buildTarget;
-
+            System.Diagnostics.Stopwatch sw1 = new System.Diagnostics.Stopwatch();
+            sw1.Start();
             buildTarget = EditorUserBuildSettings.activeBuildTarget;
-
-            var allAssets = UpdateAllAssetBundleNames();
-
-            DeleteUnusedAssetBundles(outputPath);
-            if (!Directory.Exists(outputPath))
+            using (var progressBar = new EditorProgressBar("Build AssetBundle"))
             {
-                Directory.CreateDirectory(outputPath);
+                Debug.Log(BuildLogPrefix + " BuildTarget: " + buildTarget);
+
+                progressBar.OnProgress("build start", 0f);
+                foreach (var type in AppDomain.CurrentDomain.GetAssemblies()
+                  .Referenced(typeof(IBuildAssetBundleStart).Assembly)
+                  .SelectMany(o => o.GetTypes())
+                  .Where(o => o.IsClass && !o.IsAbstract && typeof(IBuildAssetBundleStart).IsAssignableFrom(o)))
+                {
+                    var obj = Activator.CreateInstance(type) as IBuildAssetBundleStart;
+                    obj.BuildAssetBundleStart(outputPath);
+                }
+
+
+                progressBar.OnProgress("update all assetbundle name", 0f);
+                var allAssets = UpdateAllAssetBundleNames();
+                //Debug.Log("UpdateAllAssetBundleNames:" + sw1.ElapsedMilliseconds);
+
+
+
+                if (!Directory.Exists(outputPath))
+                {
+                    //var versions = FindAllVersionList();
+                    //AssetBundleVersion lastest = FindLastestPlatformVersion();
+                    //if (lastest != null)
+                    //{
+                    //    string srcPath = GetOutputPath(lastest);
+                    //    if (Directory.Exists(srcPath))
+                    //    {
+                    //        if (!Directory.Exists(Path.GetDirectoryName(outputPath)))
+                    //            Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
+                    //        FileUtil.CopyFileOrDirectory(srcPath, outputPath);
+                    //        Debug.Log(BuildLogPrefix + $"origin: {srcPath}");
+                    //    }
+                    //}
+
+                    if (!Directory.Exists(outputPath))
+                        Directory.CreateDirectory(outputPath);
+                }
+
+                AssetBundleVersion version = null;
+
+                if (File.Exists(Path.Combine(outputPath, FormatString(AssetBundleSettings.VersionFile))))
+                {
+                    version = AssetBundleVersion.LoadFromFile(Path.Combine(outputPath, FormatString(AssetBundleSettings.VersionFile)));
+                    //    File.Delete(Path.Combine(outputPath, AssetBundleSettings.VersionFile));
+                }
+
+
+                progressBar.OnProgress("load AssetBundleBuild list", 0.2f);
+                List<AssetBundleBuild> list = LoadAllAssetBundleList();
+                Dictionary<string, object> formatValues = new Dictionary<string, object>();
+
+                CreateAddressableAsset(list);
+
+                AssetBundleBuild assetBundle = new AssetBundleBuild()
+                {
+                    assetBundleName = AssetBundles.AddressableBundleName,
+                    assetNames = new string[] { AssetBundles.AddressableAssetPath }
+                };
+                list.Add(assetBundle);
+
+                //Debug.Log(" List<AssetBundleBuild> list:" + sw1.ElapsedMilliseconds);
+                BuildAssetBundleOptions options;
+
+                options = EditorAssetBundleSettings.Options;
+
+                foreach (var type in AppDomain.CurrentDomain.GetAssemblies()
+                    .Referenced(typeof(IPreprocessBuildAssetBundle).Assembly)
+                    .SelectMany(o => o.GetTypes())
+                    .Where(o => o.IsClass && !o.IsAbstract && typeof(IPreprocessBuildAssetBundle).IsAssignableFrom(o)))
+                {
+                    var obj = Activator.CreateInstance(type) as IPreprocessBuildAssetBundle;
+
+                    progressBar.OnProgress("preprocess " + type.Name, 0.3f);
+                    obj.OnPreprocessBuildAssetBundle(outputPath, list, ref options);
+                }
+
+                progressBar.OnProgress("collect all dependencies", 0.4f);
+                var deps = GetAllDependenciesMultiRef(list);
+                //Debug.Log("GetAllDependencies:" + sw1.ElapsedMilliseconds);
+                if (deps.Count > 0)
+                {
+                    list.AddRange(SplitWithHashCode(new AssetBundleBuild()
+                    {
+                        assetBundleName = EditorAssetBundleSettings.AutoDependencyBundleName,
+                        assetNames = deps.ToArray()
+                    }, EditorAssetBundleSettings.AutoDependencySplit));
+                }
+
+                //清理空的
+                for (int i = 0; i < list.Count; i++)
+                {
+                    var item = list[i];
+                    if (item.assetNames == null || item.assetNames.Length == 0)
+                    {
+                        list.RemoveAt(i);
+                        i--;
+                        continue;
+                    }
+                }
+
+                ValidateBundleNameAndDirectoryDuplication(list);
+
+                ClearExcludeDependency(list);
+
+                var items = list.ToArray();
+                outputPath = outputPath.Trim();
+                string manifestName = Path.GetFileName(outputPath);
+                string manifestPath = outputPath + "/" + manifestName;
+
+                progressBar.OnProgress($"clear output directory", 0.5f);
+                ClearOutputDirectory(outputPath, items);
+
+                Debug.Log(BuildLogPrefix + $"BuildPipeline.BuildAssetBundles: options:{options}, assetbundle total:{items.Length}");
+                progressBar.OnProgress($"BuildPipeline.BuildAssetBundles total:{items.Length}", 0.6f);
+
+                //记录build最后写入时间
+                DateTime[] lastWriteTimes = new DateTime[items.Length];
+                for (int i = 0; i < items.Length; i++)
+                {
+                    string path = Path.Combine(outputPath, items[i].assetBundleName);
+                    if (File.Exists(path))
+                    {
+                        lastWriteTimes[i] = File.GetLastWriteTimeUtc(path);
+                    }
+                }
+
+                AssetBundleManifest manifest = BuildPipeline.BuildAssetBundles(outputPath, items, options, buildTarget);
+                //Debug.Log("BuildPipeline.BuildAssetBundles:" + sw1.ElapsedMilliseconds);
+                progressBar.Show();
+                if (manifest == null)
+                {
+                    throw new Exception("build asset bundle error. manifest null");
+                }
+
+                //记录改变的文件
+                string changedAbNames = "";
+                List<AssetBundleBuild> changed = new List<AssetBundleBuild>();
+                for (int i = 0; i < items.Length; i++)
+                {
+                    string path = Path.Combine(outputPath, items[i].assetBundleName);
+
+                    if (lastWriteTimes[i] != File.GetLastWriteTimeUtc(path))
+                    {
+                        changed.Add(items[i]);
+                        if (!string.IsNullOrEmpty(changedAbNames))
+                            changedAbNames += "\n";
+                        changedAbNames += items[i].assetBundleName;
+                    }
+                }
+
+                Debug.Log(BuildLogPrefix + $"changed {changed.Count} \n[\n{changedAbNames}\n]");
+
+                //加密
+                CryptoAssetBundles(outputPath, manifest, changed);
+
+                //签名
+                SignatureAssetBundles(outputPath, manifest, changed);
+
+                progressBar.OnProgress($"create version file", 0.7f);
+                bool hashChanged = true;
+
+                hashChanged = CreateVersionFile(outputPath, ref version);
+
+
+                DeleteOutputEmptyDirectory(outputPath);
+                //string dstPath = GetOutputPath(version);
+                //if (dstPath.Replace("\\", "/") != outputPath.Replace("\\", "/"))
+                //{
+                //    if (Directory.Exists(dstPath))
+                //        Directory.Delete(dstPath, true);
+                //    progressBar.OnProgress($"Move", 1f);
+                //    if (!Directory.Exists(Path.GetDirectoryName(dstPath)))
+                //        Directory.CreateDirectory(Path.GetDirectoryName(dstPath));
+                //    FileUtil.MoveFileOrDirectory(Path.GetFullPath(outputPath), dstPath);
+                //    DeleteOutputEmptyDirectory(outputPath);
+                //    outputPath = dstPath;
+                //}
+                EditorAssetBundleSettingsWindow.versionList = null;
+                BuildAssetBundleManifestPath = outputPath + "/" + PlatformName + ".manifest";
+
+
+                if (EditorAssetBundleSettings.AssetBundleNamesClassSettings.Enabled)
+                {
+                    progressBar.OnProgress($"generate assetBundleNames class", 0.9f);
+                    //Debug.Log("GenerateAssetBundleNamesClass before:" + sw1.ElapsedMilliseconds);
+                    GenerateAssetBundleNamesClass(false);
+                    //Debug.Log("GenerateAssetBundleNamesClass after:" + sw1.ElapsedMilliseconds);
+                }
+
+                foreach (var type in AppDomain.CurrentDomain.GetAssemblies()
+                    .Referenced(typeof(IPostprocessBuildAssetBundle).Assembly)
+                    .SelectMany(o => o.GetTypes())
+                    .Where(o => o.IsClass && !o.IsAbstract && typeof(IPostprocessBuildAssetBundle).IsAssignableFrom(o)))
+                {
+
+                    progressBar.OnProgress($"postprocess " + type.Name, 0.8f);
+                    var obj = Activator.CreateInstance(type) as IPostprocessBuildAssetBundle;
+                    obj.OnPostprocessBuildAssetBundle(outputPath, options, manifest, items);
+                }
+
+                LastBuildCopyPath = GetStreamingAssetsPath();
+
+                if (!string.IsNullOrEmpty(LastBuildCopyPath))
+                {
+                    progressBar.OnProgress($"copy to streamingAssets", 0.9f);
+                    CopyToStreamingAssetsPath();
+                }
+
+                if (!EditorUserBuildSettings.development && !string.IsNullOrEmpty(EditorAssetBundleSettings.ReleasePath))
+                {
+                    string releaseDir = FormatString(EditorAssetBundleSettings.ReleasePath);
+                    releaseDir = Path.GetFullPath(releaseDir);
+                    if (Directory.Exists(Path.GetDirectoryName(releaseDir)))
+                        Directory.CreateDirectory(Path.GetDirectoryName(releaseDir));
+                    if (Directory.Exists(releaseDir))
+                        Directory.Delete(releaseDir, true);
+                    CopyToReleasePath(releaseDir);
+                }
+
+                progressBar.OnProgress($"Refresh", 1f);
+                Debug.Log(BuildLogPrefix + "output path: " + outputPath);
+                Debug.LogFormat(BuildLogPrefix + $"completed, bundleCode: {version.bundleCode} {(hashChanged ? "changed" : "unchanged")} ({sw1.Elapsed.TotalSeconds.ToString("#.#")}s)");
+                AssetDatabase.Refresh();
+
+                if (EditorAssetBundleSettings.PostBuildSettings.ShowFolder && !Application.isBatchMode)
+                {
+                    EditorUtility.RevealInFinder(Path.Combine(outputPath, manifestName));
+                }
             }
+        }
+
+        public static List<AssetBundleBuild> LoadAllAssetBundleList()
+        {
             List<AssetBundleBuild> list = new List<AssetBundleBuild>();
             Dictionary<string, object> formatValues = new Dictionary<string, object>();
+            GetFormatValues(formatValues);
 
             foreach (var assetBundle in AssetDatabase.GetAllAssetBundleNames())
             {
-
+                if (IsExcludeGroup(AssetBundles.GetBundleGroup(assetBundle)))
+                {
+                    Debug.Log(BuildLogPrefix + $"exclude bundle [{assetBundle}]");
+                    continue;
+                }
                 string[] assetPaths = AssetDatabase.GetAssetPathsFromAssetBundle(assetBundle);
                 if (assetPaths.Length == 0)
                     continue;
@@ -442,8 +795,7 @@ namespace UnityEditor.Build.AssetBundle
                 for (int i = 0; i < assetPaths.Length; i++)
                 {
                     string assetPath = assetPaths[i];
-                    formatValues.Clear();
-                    GetFormatValues(assetPaths[i], formatValues);
+                    GetFormatValuesWithAssetPath(formatValues, assetPaths[i]);
                     if (i == 0)
                     {
                         assetBundleBuild.assetBundleName = AssetDatabase.GetImplicitAssetBundleName(assetPath);
@@ -452,154 +804,521 @@ namespace UnityEditor.Build.AssetBundle
 
                     addressableNames[i] = GetAddressableName(assetPath, formatValues);
                 }
-
-
                 assetBundleBuild.assetNames = assetPaths;
                 assetBundleBuild.addressableNames = addressableNames;
                 list.Add(assetBundleBuild);
             }
-            BuildAssetBundleOptions options = BuildAssetBundleOptions.None;
-            if (!string.IsNullOrEmpty(Config.Options))
-                options = (BuildAssetBundleOptions)Enum.Parse(typeof(BuildAssetBundleOptions), Config.Options);
-
-            BuildPipeline.BuildAssetBundles(outputPath, list.ToArray(), options, buildTarget);
-
-            LastBuildCopyPath = GetBuildCopyToPath();
-            CopyToBuildPath();
-
-            Debug.LogFormat("build AssetBundles completed\noutput:{0}", outputPath);
-            if (config.BuildGenerateAssetBundleNamesClass)
-            {
-                GenerateAssetBundleNamesClass(false);
-            }
-
-            AssetDatabase.Refresh();
-
+            return list;
         }
 
-        //public static void GetAssetBundleName(string assetPath, out string assetBundleName, out string variant)
-        //{
-        //    var itemConfig = FindMatchConfig(assetPath);
-
-        //    GetAssetBundleName(itemConfig, assetPath, out assetBundleName, out variant);
-        //}
-        static void GetAssetBundleName(BuildAssetBundleItem itemConfig, string assetPath, ref string assetBundleName, ref string variant, Dictionary<string, object> values = null)
+        /// <summary>
+        /// 检查Bundle名称与文件夹冲突
+        /// </summary>
+        /// <param name="list"></param>
+        static void ValidateBundleNameAndDirectoryDuplication(List<AssetBundleBuild> list)
         {
-            if (itemConfig == null)
+            HashSet<string> directoies = new HashSet<string>(list.Select(o => Path.GetDirectoryName(o.assetBundleName).Replace('\\', '/')));
+            foreach (var item in list)
             {
-                return;
+                if (directoies.Contains(item.assetBundleName))
+                    throw new Exception($"assetBundle [{item.assetBundleName }]  and directory duplication, asset [{item.assetNames[0]}]");
             }
-
-            if (itemConfig.Ignore)
-            {
-                assetBundleName = string.Empty;
-                variant = string.Empty;
-                return;
-            }
-
-            string exName = Path.GetExtension(assetPath);
-
-            variant = GetVariant(itemConfig, exName);
-            if (!string.IsNullOrEmpty(variant))
-            {
-                if (values == null)
-                    values = GetFormatValues(assetPath);
-                variant = GetFormatString(variant, values).ToLower();
-            }
-
-            if (!string.IsNullOrEmpty(itemConfig.AssetBundleName))
-            {
-                if (values == null)
-                    values = GetFormatValues(assetPath);
-                assetBundleName = GetFormatString(itemConfig.AssetBundleName, values).ToLower();
-            }
-
-
-
         }
 
-        //static void GetAssetBundleName(string assetPath, out string assetBundleName, out string variant, Dictionary<string, object> values = null)
+        static AssetBundleBuild[] SplitWithHashCode(AssetBundleBuild bundle, int split)
+        {
+            if (split <= 1)
+                return new AssetBundleBuild[] { bundle };
+
+            List<List<string>> assetNames = new List<List<string>>();
+            List<List<string>> addressableNames = new List<List<string>>();
+
+            for (int i = 0; i < split; i++)
+            {
+                assetNames.Add(new List<string>());
+                addressableNames.Add(new List<string>());
+            }
+
+            for (int i = 0; i < bundle.assetNames.Length; i++)
+            {
+                int index = Mathf.Abs(bundle.assetNames[i].GetHashCode()) % split;
+                assetNames[index].Add(bundle.assetNames[i]);
+                if (bundle.addressableNames != null && bundle.addressableNames.Length > 0)
+                    addressableNames[index].Add(bundle.addressableNames[i]);
+            }
+
+            List<AssetBundleBuild> list = new List<AssetBundleBuild>();
+            for (int i = 0; i < split; i++)
+            {
+                if (assetNames[i].Count > 0)
+                {
+                    list.Add(new AssetBundleBuild()
+                    {
+                        assetNames = assetNames[i].ToArray(),
+                        addressableNames = addressableNames.Count > 0 ? addressableNames[i].ToArray() : null,
+                        assetBundleName = bundle.assetBundleName + i,
+                        assetBundleVariant = bundle.assetBundleVariant,
+                    });
+                }
+            }
+            return list.ToArray();
+        }
+
+        public static void DeleteOutputEmptyDirectory(string outputPath)
+        {
+            DeleteAllEmptyDirectory(outputPath);
+            if (Directory.Exists(Path.GetDirectoryName(outputPath)) && Directory.GetFiles(Path.GetDirectoryName(outputPath), "*", SearchOption.AllDirectories).Length == 0)
+                Directory.Delete(Path.GetDirectoryName(outputPath));
+        }
+
+        /// <summary>
+        /// 加密 AssetBundle
+        /// </summary>
+        /// <param name="outputPath"></param>
+        /// <param name="manifest"></param>
+        static void CryptoAssetBundles(string outputPath, AssetBundleManifest manifest, List<AssetBundleBuild> changed)
+        {
+
+            if (!AssetBundleSettings.CryptoEnabled)
+                return;
+
+            if (string.IsNullOrEmpty(EditorAssetBundleSettings.CryptoKey))
+                throw new Exception("crypto key null");
+
+            string[] abNames = GetCryptoAssetBundleNames(manifest.GetAllAssetBundles());
+
+            int total = abNames.Length;
+
+            abNames = abNames.Where(o => changed.Where(o2 => o2.assetBundleName == o).Count() > 0).ToArray();
+
+            Debug.Log(BuildLogPrefix + $"crypto total: { total}, crypto: {abNames.Length}");
+
+            if (abNames.Length <= 0)
+                return;
+
+            //加密
+            CryptoFiles(outputPath, abNames);
+        }
+
+        static void SignatureAssetBundles(string outputPath, AssetBundleManifest manifest, List<AssetBundleBuild> changed)
+        {
+
+            if (!AssetBundleSettings.SignatureEnabled)
+                return;
+
+            if (string.IsNullOrEmpty(EditorAssetBundleSettings.SignatureKeyPath))
+                throw new Exception("signature KeyPath null");
+
+            string[] abNames;
+            abNames = GetSignatureAssetBundleNames(manifest.GetAllAssetBundles());
+
+            int total = abNames.Length;
+
+            abNames = abNames.Where(o => changed.Where(o2 => o2.assetBundleName == o).Count() > 0).ToArray();
+
+            Debug.Log(BuildLogPrefix + $"signature total: { total}, signature: {abNames.Length}");
+
+            if (abNames.Length <= 0)
+                return;
+
+            //签名 
+            if (!string.IsNullOrEmpty(EditorAssetBundleSettings.SignatureKeyPath))
+            {
+                SignatureFiles(outputPath, abNames);
+            }
+        }
+
+        public static string[] GetCryptoAssetBundleNames(string[] abNames)
+        {
+            if (!AssetBundleSettings.CryptoEnabled)
+                return new string[0];
+
+            if (string.IsNullOrEmpty(EditorAssetBundleSettings.CryptoKey))
+                throw new Exception("crypto key null");
+            return IncludeAssetBundleNames(abNames, AssetBundleSettings.CryptoInclude, AssetBundleSettings.CryptoExclude);
+        }
+
+        public static string[] GetSignatureAssetBundleNames(string[] abNames)
+        {
+            if (!AssetBundleSettings.SignatureEnabled)
+                return new string[0];
+
+            if (string.IsNullOrEmpty(EditorAssetBundleSettings.SignatureKeyPath))
+                throw new Exception("signature KeyPath null");
+            return IncludeAssetBundleNames(abNames, AssetBundleSettings.SignatureInclude, AssetBundleSettings.SignatureExclude);
+        }
+
+        static string[] IncludeAssetBundleNames(string[] abNames, string include, string exclude)
+        {
+            List<string> result = new List<string>(abNames);
+
+            if (!string.IsNullOrEmpty(include))
+            {
+                //包含  
+                for (int i = 0; i < abNames.Length; i++)
+                {
+                    if (abNames[i] != null)
+                    {
+                        if (!EditorAssetBundles.IsMatch(include, abNames[i], ignoreCase: true))
+                        {
+                            result.Remove(abNames[i]);
+                        }
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(exclude))
+            {
+                //排除
+                for (int i = 0; i < abNames.Length; i++)
+                {
+                    if (abNames[i] != null)
+                    {
+                        if (EditorAssetBundles.IsMatch(exclude, abNames[i], ignoreCase: true))
+                        {
+                            result.Remove(abNames[i]);
+                        }
+                    }
+                }
+            }
+            return result.ToArray();
+        }
+
+        public static void CryptoFiles(string outputPath, string[] abNames)
+        {
+            if (!AssetBundleSettings.CryptoEnabled)
+                return;
+
+            if (string.IsNullOrEmpty(EditorAssetBundleSettings.CryptoKey))
+                throw new Exception("crypto Key null");
+            if (string.IsNullOrEmpty(EditorAssetBundleSettings.CryptoIV))
+                throw new Exception("crypto IV null");
+
+            byte[] key, iv;
+            key = Convert.FromBase64String(EditorAssetBundleSettings.CryptoKey);
+            iv = Convert.FromBase64String(EditorAssetBundleSettings.CryptoIV);
+            SymmetricAlgorithm sa = DES.Create();
+            sa.Key = key;
+            sa.IV = iv;
+
+            string cryptoAbNames = "";
+            for (int i = 0; i < abNames.Length; i++)
+            {
+                string abName = abNames[i];
+                string file = Path.Combine(outputPath, abName);
+                if (string.IsNullOrEmpty(file))
+                    continue;
+                byte[] bytes = File.ReadAllBytes(file);
+
+                using (var fs = new FileStream(file, FileMode.Create, FileAccess.Write))
+                {
+                    using (CryptoStream cs = new CryptoStream(fs, sa.CreateEncryptor(key, iv), CryptoStreamMode.Write))
+                    {
+                        cs.Write(bytes, 0, bytes.Length);
+                        cs.FlushFinalBlock();
+                    }
+                }
+                if (!string.IsNullOrEmpty(cryptoAbNames))
+                    cryptoAbNames += ", ";
+                cryptoAbNames += abName;
+            }
+
+            Debug.Log(BuildLogPrefix + "crypto :" + cryptoAbNames);
+        }
+
+        /// <summary>
+        /// 签名
+        /// </summary>
+        public static void SignatureFiles(string outputPath, string[] abNames)
+        {
+            if (string.IsNullOrEmpty(EditorAssetBundleSettings.SignatureKeyPath))
+                throw new Exception("SignatureKeyPath null");
+
+            SHA1 sha = new SHA1CryptoServiceProvider();
+            RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
+            rsa.FromXmlString(File.ReadAllText(EditorAssetBundleSettings.SignatureKeyPath));
+
+            byte[] bytes;
+            byte[] sigData;
+            string signatureAbNames = "";
+
+            for (int i = 0; i < abNames.Length; i++)
+            {
+                string abName = abNames[i];
+                string file = Path.Combine(outputPath, abName);
+                if (string.IsNullOrEmpty(file))
+                    continue;
+
+                bytes = File.ReadAllBytes(file);
+
+                sigData = rsa.SignData(bytes, sha);
+                File.Delete(file);
+                using (var fs = new FileStream(file, FileMode.Create, FileAccess.Write))
+                {
+                    fs.Write(sigData, 0, sigData.Length);
+                    fs.Write(bytes, 0, bytes.Length);
+                }
+
+                if (!string.IsNullOrEmpty(signatureAbNames))
+                    signatureAbNames += ", ";
+                signatureAbNames += abName;
+            }
+
+            Debug.Log(BuildLogPrefix + "signature :" + signatureAbNames);
+        }
+
+        public static void DeleteAllCryptoOrSignatureBuildAssetBundle()
+        {
+            string[] abNames = AssetDatabase.GetAllAssetBundleNames();
+            string outputPath = GetOutputPath();
+            if (!Directory.Exists(outputPath))
+                return;
+            foreach (var abName in GetCryptoAssetBundleNames(abNames))
+            {
+                string path = Path.Combine(outputPath, abName);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                    Debug.Log("delete " + abName);
+                }
+                if (File.Exists(path + ".manifest"))
+                    File.Delete(path + ".manifest");
+            }
+
+            foreach (var abName in GetSignatureAssetBundleNames(abNames))
+            {
+                string path = Path.Combine(outputPath, abName);
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                    Debug.Log("delete " + abName);
+                }
+                if (File.Exists(path + ".manifest"))
+                    File.Delete(path + ".manifest");
+            }
+        }
+
+        static string FileNamePatternToRegexPattern(string fileNamePattern)
+        {
+            return fileNamePattern.Replace(".", "\\.").Replace("*", ".*");
+        }
+        static HashSet<string> deleteFileExclude;
+
+        public static void ClearOutputDirectory(string outputPath, AssetBundleBuild[] items)
+        {
+            string manifestName = Path.GetFileName(outputPath);
+            if (deleteFileExclude == null)
+            {
+                deleteFileExclude = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+                deleteFileExclude.Add(FormatString(AssetBundleSettings.VersionFile));
+            }
+            HashSet<string> abs = new HashSet<string>(StringComparer.InvariantCultureIgnoreCase);
+            abs.Add(manifestName);
+            abs.Add(manifestName + ".manifest");
+            foreach (var abName in items.Select(o => o.assetBundleName.ToLower()))
+            {
+                abs.Add(abName);
+                abs.Add(abName + ".manifest");
+            }
+
+            int startIndex = outputPath.Length;
+            if (!(outputPath.EndsWith("/") || outputPath.EndsWith("\\")))
+                startIndex++;
+
+            foreach (var file in Directory.GetFiles(outputPath, "*", SearchOption.AllDirectories))
+            {
+                string ab = file.Substring(startIndex).Replace('\\', '/');
+                if (deleteFileExclude.Contains(ab))
+                    continue;
+                if (!abs.Contains(ab))
+                    FileUtil.DeleteFileOrDirectory(file);
+            }
+            DeleteAllEmptyDirectory(outputPath);
+        }
+
+
+        public static bool CreateVersionFile(string outputPath, ref AssetBundleVersion version)
+        {
+            bool changed = true;
+            string manifestName = Path.GetFileName(outputPath);
+            string hash = GetFileHashMD5(Path.Combine(outputPath, manifestName));
+            if (version != null)
+            {
+                if (version.hash != hash)
+                {
+                    version.bundleCode = version.bundleCode + 1;
+                    changed = true;
+                }
+                else
+                {
+                    changed = false;
+                }
+
+                if (EditorAssetBundleSettings.BundleCodeResetOfAppVersion && version.appVersion != GetAppVersion())
+                {
+                    version.bundleCode = 1;
+                }
+            }
+            else
+            {
+                version = new AssetBundleVersion();
+                version.bundleCode = 1;
+                changed = true;
+            }
+            version.appVersion = GetAppVersion();
+            version.platform = GetPlatformName();
+            version.channel = AssetBundleSettings.Channel;
+            version.bundleVersion = AssetBundleSettings.BundleVersion;
+            version.Timestamp = DateTime.UtcNow;
+            version.hash = hash;
+            try
+            {
+                version.commitId = System.VersionControl.Git.GetShortCommitId();
+            }
+            catch { }
+            version.groups = new string[] { LocalGroupName }.Concat(EditorAssetBundleSettings.Groups.Where(o => o.Asset).Select(o => (AssetBundleGroup)o.Asset).Select(o => o.name.ToLower())).ToArray();
+
+            AssetBundleVersion.Save(Path.Combine(outputPath, FormatString(AssetBundleSettings.VersionFile)), version);
+            Debug.Log(BuildLogPrefix + "create version file, appVersion [" + version.appVersion + "] bundleVersion [" + version.bundleVersion + "] bundleCode [" + version.bundleCode + "]");
+            //latestVersion = AssetBundleVersion.GetLatestVersionList(versionList, version.platform, null);
+            //RemoveRootVersion(latestVersion);
+            //AddRootVersion(version);
+            return changed;
+        }
+
+        public static int FindVersion(AssetBundleVersion[] versionList, AssetBundleVersion version)
+        {
+            for (int i = 0; i < versionList.Length; i++)
+            {
+                var item = versionList[i];
+                if (item.hash == version.hash)
+                    return i;
+            }
+            return -1;
+        }
+
+        //public static void ClearVersion()
         //{
-        //    var config = Config;
-
-        //    assetBundleName = string.Empty;
-        //    variant = string.Empty;
-
-        //    if (!string.IsNullOrEmpty(config.AssetBundleName))
-        //        assetBundleName = config.AssetBundleName;
-        //    variant = config.Variants;
-
-        //    foreach (var itemConfig in FindMatchConfigs(assetPath))
+        //    AssetBundleVersion[] versionList = AssetBundleVersion.LoadVersionList(GetVersionListPath());
+        //    bool changed = false;
+        //    for (int i = 0; i < versionList.Length; i++)
         //    {
-        //        if (itemConfig.Ignore)
+        //        var item = versionList[i];
+        //        string path = GetOutputPath(item);
+        //        DeleteAllEmptyDirectory(path);
+        //        if (!Directory.Exists(path))
         //        {
-        //            assetBundleName = string.Empty;
-        //            variant = string.Empty;
-        //            break;
+        //            versionList[i] = null;
+        //            changed = true;
         //        }
-        //        if (!string.IsNullOrEmpty(config.AssetBundleName))
-        //            assetBundleName = config.AssetBundleName;
-        //        variant = itemConfig.Variants;
         //    }
 
-        //    if (!string.IsNullOrEmpty(assetBundleName))
+        //    if (changed)
         //    {
-        //        if (values == null)
-        //            values = GetFormatValues(assetPath);
-        //        assetBundleName = GetFormatString(assetBundleName, values).ToLower();
-        //    }
-        //    if (!string.IsNullOrEmpty(assetBundleName))
-        //    {
-        //        if (values == null)
-        //            values = GetFormatValues(assetPath);
-        //        variant = GetFormatString(variant, values).ToLower();
+        //        AssetBundleVersion.Save(GetVersionListPath(), versionList.Where(o => o != null).ToArray());
         //    }
         //}
+
+        //public static void RemoveRootVersion(AssetBundleVersion version)
+        //{
+        //    if (version == null)
+        //        return;
+
+        //    string rootVersionPath = GetRootVersionPath(version);
+        //    if (File.Exists(rootVersionPath))
+        //        File.Delete(rootVersionPath);
+
+        //    //AssetBundleVersion[] versionList = AssetBundleVersion.LoadVersionList(GetVersionListPath());
+        //    //ArrayUtility.Remove(ref versionList, version);
+        //    //AssetBundleVersion.Save(GetVersionListPath(), versionList);
+        //    //BuildAssetBundleConfigEditorWindow.versionList = null;
+        //}
+
+        //public static void AddRootVersion(AssetBundleVersion version)
+        //{
+        //    if (version == null)
+        //        return;
+        //    AssetBundleVersion[] versionList;
+        //    string rootVersionPath = GetRootVersionPath(version);
+        //    versionList = new AssetBundleVersion[0];
+        //    //= AssetBundleVersion.LoadVersionList(GetVersionListPath());
+        //    ArrayUtility.Add(ref versionList, version);
+        //    AssetBundleVersion.Save(GetVersionListPath(), versionList);
+        //    BuildAssetBundleConfigEditorWindow.versionList = null;
+        //}
+
+        public static string GetFileHashMD5(string filePath)
+        {
+            return GetHashMD5(File.ReadAllBytes(filePath));
+        }
+
+        public static string GetHashMD5(byte[] data)
+        {
+            MD5CryptoServiceProvider md5 = new MD5CryptoServiceProvider();
+            byte[] hashBytes = md5.ComputeHash(data, 0, data.Length);
+            string hash;
+            hash = BitConverter.ToString(hashBytes).Replace("-", string.Empty).ToLower();
+            return hash;
+        }
+
+        static void DeleteAllEmptyDirectory(string dir)
+        {
+            if (!Directory.Exists(dir))
+                return;
+
+            foreach (var subDir in Directory.GetDirectories(dir, "*", SearchOption.AllDirectories))
+            {
+                if (Directory.Exists(subDir) && Directory.GetFiles(subDir, "*", SearchOption.AllDirectories).Length == 0)
+                    Directory.Delete(subDir, true);
+            }
+        }
 
         public static string GetAddressableName(string assetPath, Dictionary<string, object> values = null)
         {
 
-            var config = Config;
-
             string addressableName = null;
-            if (values == null)
-                values = GetFormatValues(assetPath);
+            bool assetNameToLower = EditorAssetBundleSettings.AssetNameToLower;
 
-            if (!string.IsNullOrEmpty(config.AssetName))
-                addressableName = GetFormatString(config.AssetName, values);
-
-            foreach (var itemConfig in FindMatchConfigs(assetPath))
+            if (EditorAssetBundleSettings.Groups != null && EditorAssetBundleSettings.Groups.Length > 0)
             {
-                if (itemConfig.Ignore)
+                for (int i = EditorAssetBundleSettings.Groups.Length - 1; i >= 0; i--)
                 {
-                    break;
-                }
-                if (!string.IsNullOrEmpty(itemConfig.AssetName))
-                {
-                    addressableName = GetAddressableName(itemConfig, assetPath, values);
-                    break;
+                    var g = EditorAssetBundleSettings.Groups[i].Asset as AssetBundleGroup;
+                    if (!g)
+                        continue;
+                    addressableName = g.GetAssetName(assetPath);
+                    if (!string.IsNullOrEmpty(addressableName))
+                        break;
                 }
             }
 
+            if (EditorAssetBundleSettings.LocalGroup)
+            {
+                addressableName = ((AssetBundleGroup)EditorAssetBundleSettings.LocalGroup.Asset).GetAssetName(assetPath);
+            }
+
+            return addressableName;
+        }
+        public static string GetDefaultAddressableName(string assetPath)
+        {
+            string addressableName = null;
             if (string.IsNullOrEmpty(addressableName))
-                addressableName = assetPath;
+            {
+                if (!string.IsNullOrEmpty(EditorAssetBundleSettings.AssetName))
+                {
+                    addressableName = FormatString(EditorAssetBundleSettings.AssetName, assetPath);
+                }
+                else
+                {
+                    addressableName = assetPath;
+                }
+                if (EditorAssetBundleSettings.AssetNameToLower)
+                    addressableName = addressableName.ToLower();
+            }
             return addressableName;
         }
 
-        static string GetAddressableName(BuildAssetBundleItem itemConfig, string assetPath, Dictionary<string, object> values)
-        {
-            string assetName = null;
-            if (itemConfig != null)
-                assetName = itemConfig.AssetName;
-            if (string.IsNullOrEmpty(assetName))
-                assetName = config.AssetName;
 
-            if (!string.IsNullOrEmpty(assetName))
-                assetName = GetFormatString(assetName, assetPath, values);
-            if (string.IsNullOrEmpty(assetName))
-                assetName = assetPath;
-            return assetName;
-        }
         static XmlDocument assetBundleData;
 
         static XmlDocument AssetBundleData
@@ -614,47 +1333,6 @@ namespace UnityEditor.Build.AssetBundle
             }
         }
 
-        public static bool IsPreloadedAssetBundleByAssetpath(string assetPath)
-        {
-            bool preloaded = false;
-
-            foreach (var itemConfig in FindMatchConfigs(assetPath))
-            {
-                if (itemConfig.Ignore)
-                {
-                    preloaded = false;
-                    break;
-                }
-                preloaded = itemConfig.Preloaded;
-            }
-            return preloaded;
-        }
-
-        static BuildAssetBundleItem FindMatchConfig(string assetPath)
-        {
-            return FindMatchConfigs(assetPath).FirstOrDefault();
-        }
-
-        static IEnumerable<BuildAssetBundleItem> FindMatchConfigs(string assetPath)
-        {
-            var config = Config;
-
-            for (int i = 0; i < config.Items.Count; i++)
-            {
-                var itemConfig = config.Items[i];
-                if (string.IsNullOrEmpty(itemConfig.Directory))
-                    continue;
-                if (!assetPath.PathStartsWithDirectory(itemConfig.Directory))
-                    continue;
-
-                if (!string.IsNullOrEmpty(itemConfig.Pattern) && !itemConfig.PatternRegex.IsMatch(assetPath))
-                    continue;
-
-                yield return itemConfig;
-            }
-        }
-
-
         public static bool UpdateAssetBundleName(string assetPath)
         {
             string assetBundleName, variant;
@@ -662,28 +1340,34 @@ namespace UnityEditor.Build.AssetBundle
             assetBundleName = string.Empty;
             variant = string.Empty;
 
-
-            if (!IsRootConfigIgnoreAssetPath(assetPath))
+            if (!IsExcludePath(assetPath))
             {
-                Dictionary<string, object> formatValues = null;
+                Dictionary<string, object> formatValues = new Dictionary<string, object>();
+                GetFormatValues(assetPath, formatValues);
 
 
-                foreach (var itemConfig in FindMatchConfigs(assetPath))
+                if (string.IsNullOrEmpty(assetBundleName))
                 {
-                    if (itemConfig.Ignore)
+                    if (EditorAssetBundleSettings.Groups != null && EditorAssetBundleSettings.Groups.Length > 0)
                     {
-                        assetBundleName = string.Empty;
-                        variant = string.Empty;
-                        break;
+                        for (int i = EditorAssetBundleSettings.Groups.Length - 1; i >= 0; i--)
+                        {
+                            var g = EditorAssetBundleSettings.Groups[i].Asset as AssetBundleGroup;
+                            if (!g)
+                                continue;
+                            assetBundleName = g.GetBundleName(assetPath, out variant);
+                            if (!string.IsNullOrEmpty(assetBundleName))
+                                break;
+                        }
                     }
+                }
+            }
 
-                    if (formatValues == null)
-                    {
-                        formatValues = GetFormatValues(assetPath);
-                        if (!string.IsNullOrEmpty(config.AssetBundleName))
-                            assetBundleName = GetFormatString(config.AssetBundleName, formatValues);
-                    }
-                    GetAssetBundleName(itemConfig, assetPath, ref assetBundleName, ref variant, formatValues);
+            if (string.IsNullOrEmpty(assetBundleName))
+            {
+                if (EditorAssetBundleSettings.LocalGroup)
+                {
+                    assetBundleName = ((AssetBundleGroup)EditorAssetBundleSettings.LocalGroup.Asset).GetBundleName(assetPath, out variant);
                 }
             }
 
@@ -691,21 +1375,70 @@ namespace UnityEditor.Build.AssetBundle
             if (!importer)
                 return false;
             bool changed = false;
+            if (assetBundleName == null)
+                assetBundleName = string.Empty;
+            if (variant == null)
+                variant = string.Empty;
             if (importer.assetBundleName != assetBundleName || importer.assetBundleVariant != variant)
             {
                 importer.SetAssetBundleNameAndVariant(assetBundleName, variant);
                 changed = true;
             }
+            string guid = AssetDatabase.AssetPathToGUID(assetPath);
 
+            if (string.IsNullOrEmpty(assetBundleName))
+            {
+                if (AddressableAsset.Remove(guid))
+                {
+                    EditorUtility.SetDirty(AddressableAsset);
+                    DelaySaveAssets();
+                }
+            }
+            else
+            {
+                if (AddressableAsset.Add(guid, GetAddressableName(assetPath), assetBundleName))
+                {
+                    EditorUtility.SetDirty(AddressableAsset);
+                    DelaySaveAssets();
+                }
+            }
+            //EditorApplication.delayCall -= DirtyAddressableAsset;
+            //EditorApplication.delayCall += DirtyAddressableAsset;
             return changed;
         }
 
+        public static string GetDefaultBundleName(string assetPath)
+        {
+            string assetBundleName = null;
+            if (!string.IsNullOrEmpty(EditorAssetBundleSettings.AssetBundleName))
+            {
+                assetBundleName = FormatString(EditorAssetBundleSettings.AssetBundleName, assetPath);
+                assetBundleName = assetBundleName.ToLower();
+            }
+            return assetBundleName;
+        }
+        //static void DirtyAddressableAsset()
+        //{
+        //    EditorUtility.SetDirty(AddressableAsset);
+        //}
+        static bool isSaveAssets;
+        public static void DelaySaveAssets()
+        {
+            isSaveAssets = true;
+            EditorApplication.delayCall += () =>
+            {
+                if (!isSaveAssets)
+                    return;
+                isSaveAssets = false;
+                AssetDatabase.SaveAssets();
+            };
+        }
 
-        [MenuItem(MenuPrefix + "Update All AssetBundle Names", priority = 2)]
+        // [MenuItem(EditorAssetBundles.MenuPrefix + "Update All AssetBundle Names", priority = EditorAssetBundles.OtherMenuPriority)]
         public static IEnumerable<string> UpdateAllAssetBundleNames()
         {
-            var config = Config;
-
+            DateTime startTime = DateTime.Now;
+            RequireLocalGroup();
             bool changed = false;
             Action onChange = () =>
             {
@@ -716,69 +1449,16 @@ namespace UnityEditor.Build.AssetBundle
                 }
             };
 
-            foreach (var abName in AssetDatabase.GetAllAssetBundleNames())
-            {
-                foreach (var assetPath in AssetDatabase.GetAssetPathsFromAssetBundle(abName))
-                {
-                    var item = config.FindItem(assetPath);
-                    if (item == null || item.Ignore)
-                    {
-                        AssetImporter importer = AssetImporter.GetAtPath(assetPath);
-                        if (importer.assetBundleName != string.Empty || importer.assetBundleVariant != string.Empty)
-                        {
-                            importer.SetAssetBundleNameAndVariant(string.Empty, string.Empty);
-                            onChange();
-                        }
-                    }
-                }
-            }
+            HashSet<string> allAssetBundles = new HashSet<string>();
+
 
             HashSet<string> assetPaths = new HashSet<string>();
 
-            //include all assets
-            for (int i = 0; i < config.Items.Count; i++)
+            foreach (var assetPath in AssetDatabase.GetAllAssetPaths())
             {
-                var itemConfig = config.Items[i];
-                if (string.IsNullOrEmpty(itemConfig.Directory))
-                    continue;
-
-                if (!Directory.Exists(itemConfig.Directory))
-                {
-                    Debug.LogWarning("directory not exists, " + itemConfig.Directory);
-                    continue;
-                }
-
-                foreach (var guid in AssetDatabase.FindAssets("", new string[] { itemConfig.Directory }))
-                {
-                    string assetPath = AssetDatabase.GUIDToAssetPath(guid);
-
-                    if (IsIgnoreAssetPath(assetPath))
-                    {
-                        assetPaths.Remove(assetPath);
-                    }
-                    else
-                    {
-                        assetPaths.Add(assetPath);
-                    }
-                }
+                assetPaths.Add(assetPath);
             }
 
-            //exclude  asset
-            foreach (var abName in AssetDatabase.GetAllAssetBundleNames())
-            {
-                foreach (var assetPath in AssetDatabase.GetAssetPathsFromAssetBundle(abName))
-                {
-                    if (!assetPaths.Contains(assetPath))
-                    {
-                        AssetImporter importer = AssetImporter.GetAtPath(assetPath);
-                        if (importer.assetBundleName != string.Empty || importer.assetBundleVariant != string.Empty)
-                        {
-                            importer.SetAssetBundleNameAndVariant(string.Empty, string.Empty);
-                            onChange();
-                        }
-                    }
-                }
-            }
 
             foreach (var assetPath in assetPaths)
             {
@@ -796,69 +1476,63 @@ namespace UnityEditor.Build.AssetBundle
                 AssetDatabase.SaveAssets();
                 AssetDirtied = false;
             }
-
+            Debug.Log(BuildLogPrefix + "update all assetbundle name time: " + (DateTime.Now - startTime).TotalSeconds.ToString("0.#") + "s");
+            ValidateGroup();
             return assetPaths;
         }
 
-        static string GetVariant(BuildAssetBundleItem item, string extension)
+
+
+        //public static void DeleteUnusedAssetBundles(string path)
+        //{
+        //    if (Directory.Exists(path))
+        //    {
+        //        HashSet<string> names = new HashSet<string>(AssetDatabase.GetAllAssetBundleNames());
+        //        foreach (var name in AssetDatabase.GetUnusedAssetBundleNames())
+        //        {
+        //            names.Remove(name);
+        //        }
+        //        string[] extensions = new string[] { ".meta", ".manifest", ".manifest.meta" };
+        //        foreach (var filePath in Directory.GetFiles(path, "*", SearchOption.TopDirectoryOnly))
+        //        {
+        //            string filename = Path.GetFileName(filePath);
+        //            string exName = Path.GetExtension(filename);
+
+        //            if (string.Equals(exName, ".manifest", StringComparison.InvariantCultureIgnoreCase))
+        //                continue;
+        //            if (string.Equals(exName, ".meta", StringComparison.InvariantCultureIgnoreCase))
+        //                continue;
+
+        //            if (names.Contains(filename))
+        //                continue;
+
+        //            DeleteFileOrDirectory(filePath);
+        //            foreach (var ex in extensions)
+        //            {
+        //                if (File.Exists(filePath + ex))
+        //                    DeleteFileOrDirectory(filePath + ex);
+        //            }
+        //        }
+        //    }
+        //}
+
+        private static void DeleteFileOrDirectory(string path)
         {
-            string variant = string.Empty;
-            if (!item.variantsMap.TryGetValue(extension, out variant))
+            if (File.Exists(path))
             {
-                if (!item.variantsMap.TryGetValue(string.Empty, out variant))
-                {
-                    if (!Config.VariantsMap.TryGetValue(extension, out variant))
-                    {
-                        if (!Config.VariantsMap.TryGetValue(string.Empty, out variant))
-                        {
-                            variant = string.Empty;
-                        }
-                    }
-                }
+                //清除只读权限
+                path.FileClearAttributes();
+                File.Delete(path);
             }
-            return variant;
-        }
-
-        public static void DeleteUnusedAssetBundles(string path)
-        {
-            if (Directory.Exists(path))
+            else if (Directory.Exists(path))
             {
-                HashSet<string> names = new HashSet<string>(AssetDatabase.GetAllAssetBundleNames());
-                foreach (var name in AssetDatabase.GetUnusedAssetBundleNames())
-                {
-                    names.Remove(name);
-                }
-                string[] extensions = new string[] { ".meta", ".manifest", ".manifest.meta" };
-                foreach (var filePath in Directory.GetFiles(path, "*", SearchOption.TopDirectoryOnly))
-                {
-                    string filename = Path.GetFileName(filePath);
-                    string exName = Path.GetExtension(filename);
-
-                    if (string.Equals(exName, ".manifest", StringComparison.InvariantCultureIgnoreCase))
-                        continue;
-                    if (string.Equals(exName, ".meta", StringComparison.InvariantCultureIgnoreCase))
-                        continue;
-
-                    if (names.Contains(filename))
-                        continue;
-
-                    DeleteFile(filePath);
-                    foreach (var ex in extensions)
-                    {
-                        if (File.Exists(filePath + ex))
-                            DeleteFile(filePath + ex);
-                    }
-                }
+                foreach (var file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
+                    DeleteFileOrDirectory(file);
+                Directory.Delete(path, true);
             }
         }
 
-        private static void DeleteFile(string filePath)
-        {
-            filePath.ClearFileAttributes();
-            File.Delete(filePath);
-        }
-
-        private static void CopyDirectory(string src, string dst)
+        private static void SyncDirectory(string src, Func<string, bool> filterSrc, string dst, Func<string, bool> filterDst = null)
         {
             if (!Directory.Exists(src))
                 return;
@@ -874,6 +1548,10 @@ namespace UnityEditor.Build.AssetBundle
                 string relativePath = srcFile.Substring(src.Length);
                 if (relativePath.StartsWith("\\") || relativePath.StartsWith("/"))
                     relativePath = relativePath.Substring(1);
+                if (filterSrc != null && !filterSrc(relativePath))
+                {
+                    continue;
+                }
                 srcFiles.Add(relativePath, srcFile);
             }
 
@@ -882,14 +1560,13 @@ namespace UnityEditor.Build.AssetBundle
                 string relativePath = dstFile.Substring(dst.Length);
                 if (relativePath.StartsWith("\\") || relativePath.StartsWith("/"))
                     relativePath = relativePath.Substring(1);
+                if (filterDst != null && !filterDst(relativePath))
+                    continue;
                 dstFiles.Add(relativePath, dstFile);
-            }
 
-            foreach (var dstFile in dstFiles)
-            {
-                if (!srcFiles.ContainsKey(dstFile.Key))
+                if (!srcFiles.ContainsKey(relativePath))
                 {
-                    DeleteFile(dstFile.Value);
+                    DeleteFileOrDirectory(dstFile);
                 }
             }
 
@@ -913,39 +1590,55 @@ namespace UnityEditor.Build.AssetBundle
                     CopyFile(srcFile.Value, dstFile);
                 }
             }
+            DeleteAllEmptyDirectory(dst);
 
         }
 
 
 
-        private static bool IsRootConfigIgnoreAssetPath(string assetPath)
+        private static bool IsExcludePath(string assetPath)
         {
             bool ignore = false;
-            var ignores = Config.IgnorePaths;
-            if (ignores != null)
+
+            if (EditorAssetBundleSettings.ExcludeExtensions != null && EditorAssetBundleSettings.ExcludeExtensions.Length > 0)
             {
-                foreach (var path in ignores)
+                var excludes = EditorAssetBundleSettings.ExcludeExtensions;
+                for (int i = 0, len = excludes.Length; i < len; i++)
                 {
-                    if (Path.IsPathRooted(path))
+                    var exclude = excludes[i];
+                    if (!string.IsNullOrEmpty(exclude) && assetPath.EndsWith(exclude, StringComparison.InvariantCultureIgnoreCase))
+                        return true;
+                }
+            }
+
+
+            if (EditorAssetBundleSettings.IgnorePaths != null)
+            {
+                for (int i = 0; i < EditorAssetBundleSettings.IgnorePaths.Length; i++)
+                {
+                    if (AssetBundles.GetOrCacheRegex(EditorAssetBundleSettings.IgnorePaths[i]).IsMatch(assetPath))
                     {
-                        if (PathStartsWith(assetPath, path.Substring(1)))
-                        {
-                            ignore = true;
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        if (PathContains(assetPath, path))
-                        {
-                            ignore = true;
-                            break;
-                        }
+                        ignore = true;
+                        break;
                     }
                 }
             }
+
             return ignore;
         }
+        public static bool IsExcludeGroup(string groupName)
+        {
+            if (!EditorUserBuildSettings.development )
+            {
+                foreach(var g in EditorAssetBundleSettings.Groups.Select(o => (AssetBundleGroup)o.Asset))
+                {
+                    if (g.IsDebug && g.GroupName.Equals(groupName, StringComparison.InvariantCultureIgnoreCase))
+                        return true;
+                }
+            }
+            return false;
+        }
+
 
         public static bool IsIgnoreAssetPath(string assetPath)
         {
@@ -953,87 +1646,323 @@ namespace UnityEditor.Build.AssetBundle
 
             if (Directory.Exists(assetPath))
                 return true;
-
-            ignore = IsRootConfigIgnoreAssetPath(assetPath);
-            if (ignore)
-                return true;
-            foreach (var itemConfig in FindMatchConfigs(assetPath))
-            {
-                if (itemConfig.Ignore)
-                {
-                    ignore = true;
-                    break;
-                }
-            }
+            ignore = IsExcludePath(assetPath);
             return ignore;
         }
 
-        public static void LoadConfig()
-        {
-            string filePath = ConfigFilePath;
 
-            if (config != null)
+        public static bool ignoreLoad;
+
+        public static int FindIndex(List<AssetBundleBuild> list, string assetBundleName)
+        {
+            int index = -1;
+            for (int i = 0; i < list.Count; i++)
             {
-                if (File.Exists(filePath) && lastConfigWriteTime != File.GetLastWriteTimeUtc(filePath))
+                if (list[i].assetBundleName == assetBundleName)
                 {
-                    config = null;
+                    index = i;
+                    break;
                 }
             }
-            if (config == null)
-            {
-                if (File.Exists(filePath))
-                {
-                    try
-                    {
-                        string json = File.ReadAllText(ConfigFilePath, Encoding.UTF8);
-                        config = JsonUtility.FromJson<BuildAssetBundleConfig>(json);
-                        lastConfigWriteTime = File.GetLastWriteTimeUtc(filePath);
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.LogException(ex);
-                        Debug.LogError("config file format error " + filePath);
-                    }
-                }
-                else
-                {
-                    config = new BuildAssetBundleConfig();
-                    config.OnAfterDeserialize();
-                    SaveConfig();
-                }
+            return index;
+        }
 
+        public static AssetBundleBuild GetOrCreate(List<AssetBundleBuild> list, string bundleName, string variant = null)
+        {
+            int index;
+            return GetOrCreate(list, bundleName, variant, out index);
+        }
+        public static AssetBundleBuild GetOrCreate(List<AssetBundleBuild> list, string bundleName, out int index)
+        {
+            return GetOrCreate(list, bundleName, null, out index);
+        }
+        public static AssetBundleBuild GetOrCreate(List<AssetBundleBuild> list, string bundleName, string variant, out int index)
+        {
+            index = FindIndex(list, bundleName);
+            if (index == -1)
+            {
+                AssetBundleBuild ab = new AssetBundleBuild()
+                {
+                    assetBundleName = bundleName,
+                    assetBundleVariant = variant,
+                    assetNames = new string[0],
+                    addressableNames = new string[0]
+                };
+                list.Add(ab);
+                index = list.Count - 1;
+            }
+            return list[index];
+        }
+        public static void Remove(List<AssetBundleBuild> list, string bundleName)
+        {
+            int index = FindIndex(list, bundleName);
+            if (index >= 0)
+            {
+                list.RemoveAt(index);
+            }
+        }
+        public static List<string> GetAutoDependencies(List<string> assetPaths)
+        {
+            HashSet<string> deps = new HashSet<string>();
+            HashSet<string> origin = new HashSet<string>(assetPaths);
+
+            foreach (var dep in AssetDatabase.GetDependencies(assetPaths.ToArray(), true))
+            {
+                if (origin.Contains(dep))
+                    continue;
+                deps.Add(dep);
+            }
+            return deps.ToList();
+        }
+
+        public static IEnumerable<string> GetAutoDependencies(List<AssetBundleBuild> list)
+        {
+            HashSet<string> all = new HashSet<string>(list.SelectMany(o => o.assetNames), StringComparer.InvariantCultureIgnoreCase);
+
+            foreach (var assetPath in AssetDatabase.GetDependencies(all.ToArray()))
+            {
+                if (Path.GetFileName(assetPath) == "LightingData.asset")
+                    continue;
+                if (assetPath.EndsWith(".cs"))
+                    continue;
+                if (assetPath.EndsWith(".shader", StringComparison.InvariantCultureIgnoreCase))
+                {
+                    if (all.Contains(assetPath))
+                    {
+                        continue;
+                    }
+                    yield return assetPath;
+                }
             }
         }
 
-        public static void SaveConfig()
+        public static List<string> GetAllDependenciesMultiRef(List<AssetBundleBuild> list, Func<string, bool> filter = null)
         {
-            string str = JsonUtility.ToJson(Config, true);
-            ConfigFilePath.ClearFileAttributes();
-            File.WriteAllText(ConfigFilePath, str, Encoding.UTF8);
+
+            Dictionary<string, List<string>> allDeps = new Dictionary<string, List<string>>();
+            HashSet<string> abAssetPaths = new HashSet<string>();
+
+            foreach (var item in list)
+            {
+                foreach (var assetPath in item.assetNames)
+                {
+                    abAssetPaths.Add(assetPath);
+                }
+            }
+
+            foreach (var item in list)
+            {
+                foreach (var dep in AssetDatabase.GetDependencies(item.assetNames, true))
+                {
+                    if (IsExclude(dep))
+                        continue;
+                    if (filter != null && !filter(dep))
+                        continue;
+                    if (abAssetPaths.Contains(dep))
+                        continue;
+
+                    if (allDeps.ContainsKey(dep))
+                    {
+                        allDeps[dep].Add(item.assetBundleName);
+                    }
+                    else
+                    {
+                        var tmp = new List<string>();
+                        tmp.Add(item.assetBundleName);
+                        allDeps.Add(dep, tmp);
+                    }
+                }
+            }
+
+            List<string> result = new List<string>();
+            foreach (var item in allDeps)
+            {
+                string assetPath = item.Key;
+                if (item.Value.Count > 1)
+                {
+                    result.Add(assetPath);
+                }
+            }
+
+            return result;
         }
 
+        public static bool IsExclude(string assetPath)
+        {
+            //场景光照信息只能和场景包一起
+            if (Path.GetFileName(assetPath) == "LightingData.asset")
+                return true;
+
+            if (EditorAssetBundleSettings.ExcludeExtensions != null && EditorAssetBundleSettings.ExcludeExtensions.Length > 0)
+            {
+                var excludes = EditorAssetBundleSettings.ExcludeExtensions;
+                for (int i = 0, len = excludes.Length; i < len; i++)
+                {
+                    var exclude = excludes[i];
+                    if (!string.IsNullOrEmpty(exclude) && Path.GetExtension(assetPath).Equals(exclude, StringComparison.InvariantCultureIgnoreCase))
+                        return true;
+                }
+            }
+            if (EditorAssetBundleSettings.ExcludeTypeNames != null && EditorAssetBundleSettings.ExcludeTypeNames.Length > 0)
+            {
+                var excludes = EditorAssetBundleSettings.ExcludeTypeNames;
+                for (int i = 0, len = excludes.Length; i < len; i++)
+                {
+                    var exclude = excludes[i];
+                    if (!string.IsNullOrEmpty(exclude))
+                    {
+                        var obj = AssetDatabase.LoadAssetAtPath(assetPath, typeof(UnityEngine.Object));
+                        if (obj && obj.GetType().FullName == exclude)
+                            return true;
+                    }
+                }
+            }
+            return false;
+        }
+        public static bool ClearExcludeDependency(List<AssetBundleBuild> items)
+        {
+            HashSet<string> excludePaths = new HashSet<string>();
+
+            if (EditorAssetBundleSettings.ExcludeDependencyExtensions != null && EditorAssetBundleSettings.ExcludeDependencyExtensions.Length > 0)
+            {
+                var excludes = EditorAssetBundleSettings.ExcludeDependencyExtensions;
+                for (int i = 0, len = excludes.Length; i < len; i++)
+                {
+                    var exclude = excludes[i];
+                    for (int j = 0; j < items.Count; j++)
+                    {
+                        AssetBundleBuild bundleBuild = items[j];
+                        string[] assetPaths = bundleBuild.assetNames;
+                        string assetPath;
+                        for (int k = 0; k < assetPaths.Length; k++)
+                        {
+                            assetPath = assetPaths[k];
+                            if (!string.IsNullOrEmpty(exclude) && Path.GetExtension(assetPath).Equals(exclude, StringComparison.InvariantCultureIgnoreCase))
+                            {
+                                excludePaths.Add(assetPath);
+                            }
+                        }
+                    }
+                }
+            }
+
+            HashSet<string> excludeDepPaths = new HashSet<string>(AssetDatabase.GetDependencies(excludePaths.ToArray(), true));
+            foreach (var assetPath in excludePaths)
+                excludeDepPaths.Remove(assetPath);
+
+            for (int i = 0; i < items.Count; i++)
+            {
+                AssetBundleBuild bundleBuild = items[i];
+                string[] assetPaths = bundleBuild.assetNames;
+                string[] addressableNames = bundleBuild.addressableNames;
+                string assetPath;
+                int changed = 0;
+                for (int j = 0; j < assetPaths.Length; j++)
+                {
+                    assetPath = assetPaths[j];
+                    if (excludeDepPaths.Contains(assetPath))
+                    {
+                        assetPaths[j] = null;
+                        addressableNames[j] = null;
+                        changed++;
+                    }
+                }
+                if (changed > 0)
+                {
+                    if (assetPaths.Length > changed)
+                    {
+                        bundleBuild.assetNames = assetPaths.Where(o => o != null).ToArray();
+                        bundleBuild.addressableNames = addressableNames.Where(o => o != null).ToArray();
+                    }
+                    else
+                    {
+                        items.RemoveAt(i);
+                        i--;
+                    }
+                }
+            }
+
+            return false;
+        }
 
         #region PreProcessBuild
 
         [PreProcessBuild(1)]
         static void PreProcessBuild_BuildAssetBundles()
         {
-            string outputPath = GetOutputPath();
+            if (!EditorAssetBundleSettings.Enabled && EditorAssetBundleSettings.PreBuildPlayerSettings.AutoBuildAssetBundle)
+                return;
+            //string outputPath = GetNextOutputPath();
 
-            Build(outputPath);
+            Build();
         }
 
         //[MenuItem(MenuPrefix + "CopyToBuildPath")]
-        static void CopyToBuildPath()
-        {
-            string outputPath = GetOutputPath();
-            string buildCopyPath = GetBuildCopyToPath();
-            if (!string.IsNullOrEmpty(buildCopyPath))
-            {
-                CopyDirectory(outputPath, buildCopyPath);
-                Debug.LogFormat("copy AssetBundles\nsrc:{0}\ndst:{1}", outputPath, buildCopyPath);
-            }
 
+        static void CopyToStreamingAssetsPath()
+        {
+            string path = GetStreamingAssetsPath();
+            if (string.IsNullOrEmpty(path))
+            {
+                Debug.LogError("StreamingAssetsPath null");
+                return;
+            }
+            string[] excludeGroups = null;
+            if (!string.IsNullOrEmpty(EditorAssetBundleSettings.StreamingAssetsExcludeGroup))
+                excludeGroups = EditorAssetBundleSettings.StreamingAssetsExcludeGroup.Split('|');
+            CopyToReleasePath(path, excludeGroups);
+            AssetDatabase.Refresh();
+        }
+
+        public static void CopyToReleasePath(string copyToPath, string[] excludeGroup = null)
+        {
+            if (string.IsNullOrEmpty(copyToPath))
+                return;
+
+            //string platformName = GetPlatformName();
+            //string parentDir = Path.GetDirectoryName(copyToPath);
+
+            //if (Directory.Exists(parentDir))
+            //{
+            //    foreach (var dir in Directory.GetDirectories(parentDir, "*", SearchOption.TopDirectoryOnly))
+            //    {
+            //        DirectoryInfo dirInfo = new DirectoryInfo(dir);
+            //        if (string.Equals(dirInfo.Name, platformName, StringComparison.InvariantCultureIgnoreCase))
+            //            continue;
+            //        dirInfo.Attributes = FileAttributes.Normal;
+            //        foreach (var file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+            //        {
+            //            FileInfo fileInfo = new FileInfo(file);
+            //            fileInfo.Attributes = FileAttributes.Normal;
+            //        }
+            //        Directory.Delete(dir, true);
+            //        Debug.Log("delete dir:" + dir);
+            //    }
+            //}
+            SyncDirectory(GetOutputPath(), o =>
+            {
+                if (o.EndsWith(".manifest", StringComparison.InvariantCultureIgnoreCase))
+                    return false;
+                if (excludeGroup != null)
+                {
+                    foreach (var group in excludeGroup)
+                    {
+                        if (AssetBundles.IsBundleGroup(o, group))
+                            return false;
+                    }
+                }
+
+                return true;
+            }, copyToPath, o =>
+            !o.EndsWith(".meta"));
+            if (excludeGroup != null && excludeGroup.Length > 0)
+            {
+                string path = Path.Combine(copyToPath, FormatString(AssetBundleSettings.VersionFile));
+                var version = AssetBundleVersion.LoadFromFile(path);
+                version.groups = version.groups.Where(o => !excludeGroup.Contains(o)).ToArray();
+                AssetBundleVersion.Save(path, version);
+            }
+            Debug.LogFormat(BuildLogPrefix + "release :{0}", copyToPath);
         }
 
         /// <summary>
@@ -1048,8 +1977,14 @@ namespace UnityEditor.Build.AssetBundle
         [PostProcessBuild]
         static void PostProcessBuild(BuildTarget buildTarget, string pathToBuiltProject)
         {
+            if (!EditorAssetBundleSettings.Enabled)
+                return;
+            if (!EditorAssetBundleSettings.PostBuildPlayerSettings.ClearStreamingAssets)
+                return;
             //打包结束后删除资源
-            string copyPath = GetBuildCopyToPath();
+            string copyPath = GetStreamingAssetsPath();
+            if (string.IsNullOrEmpty(copyPath))
+                return;
             LastBuildCopyPath = copyPath;
             if (!string.IsNullOrEmpty(copyPath))
             {
@@ -1058,6 +1993,7 @@ namespace UnityEditor.Build.AssetBundle
                     Directory.Delete(copyPath, true);
                     LastBuildCopyPath = null;
                     AssetDatabase.Refresh();
+                    Debug.Log("delete copy path");
                 }
             }
         }
@@ -1129,8 +2065,6 @@ namespace UnityEditor.Build.AssetBundle
 
         static XmlDocument GetAssetBundleNamesData()
         {
-            var config = Config;
-
             AssetDatabase.RemoveUnusedAssetBundleNames();
 
             Dictionary<string, Dictionary<string, AssetInfo>> classes = new Dictionary<string, Dictionary<string, AssetInfo>>();
@@ -1189,28 +2123,37 @@ namespace UnityEditor.Build.AssetBundle
 
 
                     string className = assetBundleNamesClassName;
-                    if (!string.IsNullOrEmpty(config.AssetClass))
-                        className = FileNameToSafeChar(GetFormatString(config.AssetClass, assetPath));
-                    string assetName = assetPath.ToLower();
+                    if (!string.IsNullOrEmpty(EditorAssetBundleSettings.AssetBundleNamesClassSettings.AssetNameClass))
+                        className = FileNameToSafeChar(FormatString(EditorAssetBundleSettings.AssetBundleNamesClassSettings.AssetNameClass, assetPath));
+
                     string assetField;
-                    string addressableName;
+                    string addressableName = null;
+                    addressableName = GetAddressableName(assetPath, formatValues);
 
-                    addressableName = assetPath.ToLower();
-                    if (!string.IsNullOrEmpty(config.AssetName))
-                        addressableName = GetFormatString(config.AssetName, formatValues);
+                    //assetField = FileNameToSafeChar(GetFormatValue(formatValues, FormatArg_AssetName));
+                    assetField = FileNameToSafeChar(Path.GetFileNameWithoutExtension(assetPath));
 
-                    assetField = FileNameToSafeChar((string)formatValues[FormatArg_AssetName]);
-
+                    /*
                     for (int j = 0; j < config.Items.Count; j++)
                     {
                         var itemConfig = config.Items[j];
 
-                        if (!PathDirectoryStartsWith(Path.GetDirectoryName(assetPath), itemConfig.Directory))
+                        if (!string.IsNullOrEmpty(itemConfig.Directory))
+                        {
+                            if (!PathDirectoryStartsWith(Path.GetDirectoryName(assetPath), itemConfig.Directory))
+                                continue;
+                        }
+                        else if (!string.IsNullOrEmpty(itemConfig.File))
+                        {
+                            if (!string.Equals(assetPath, itemConfig.File))
+                                continue;
+                        }
+                        else
+                        {
                             continue;
-                        if (!itemConfig.PatternRegex.IsMatch(assetPath))
+                        }
+                        if (!string.IsNullOrEmpty(itemConfig.Filter) && !Utils.IsMatchPath(assetPath, itemConfig.Filter))
                             continue;
-                        if (itemConfig.Ignore)
-                            break;
 
                         if (!string.IsNullOrEmpty(itemConfig.AssetClass))
                             className = FileNameToSafeChar(GetFormatString(itemConfig.AssetClass, formatValues));
@@ -1229,23 +2172,16 @@ namespace UnityEditor.Build.AssetBundle
                             }
                         }
 
-                        if (!string.IsNullOrEmpty(itemConfig.AssetName))
+                        if (itemConfig.Tags != null && itemConfig.Tags.Length > 0)
                         {
-                            addressableName = GetAddressableName(itemConfig, assetPath, formatValues);
-                            assetField = FileNameToSafeChar(Path.GetFileNameWithoutExtension(addressableName));
-                            addressableName = addressableName.ToLower();
-                        }
-
-                        if (itemConfig.TagArray != null && itemConfig.TagArray.Length > 0)
-                        {
-                            foreach (var tag in itemConfig.TagArray)
+                            foreach (var tag in itemConfig.Tags)
                             {
                                 if (!abInfo.Tags.Contains(tag))
                                     abInfo.Tags.Add(tag);
                             }
                         }
 
-                    }
+                    }*/
 
 
                     Dictionary<string, AssetInfo> fields;
@@ -1405,9 +2341,9 @@ namespace UnityEditor.Build.AssetBundle
                     if (asset is GameObject)
                     {
                         var go = asset as GameObject;
-                        if (config.Components != null)
+                        if (EditorAssetBundleSettings.Components != null)
                         {
-                            foreach (var cptType in config.Components)
+                            foreach (var cptType in EditorAssetBundleSettings.Components)
                             {
                                 var cpt = go.GetComponent(cptType);
                                 if (cpt)
@@ -1454,9 +2390,14 @@ namespace UnityEditor.Build.AssetBundle
         /// <summary>
         /// 不自动生成新的资源名称类，避免少资源或者资源重命名导致编译失败无法正常打包和开发
         /// </summary>
-        [MenuItem(MenuPrefix + "gen AssetBundleNames")]
+        // [MenuItem(EditorAssetBundles.MenuPrefix + "gen AssetBundleNames", priority = EditorAssetBundles.BuildMenuPriority + 2)]
         public static void GenerateAssetBundleNamesClass()
         {
+            if (!EditorAssetBundleSettings.AssetBundleNamesClassSettings.Enabled)
+            {
+                Debug.LogWarning("Generate AssetBundleNames Class canceled. AssetBundleNamesClass.Enabled = false");
+                return;
+            }
             if (GenerateAssetBundleNamesClass(true))
             {
                 AssetDatabase.Refresh();
@@ -1466,10 +2407,7 @@ namespace UnityEditor.Build.AssetBundle
 
         public static bool GenerateAssetBundleNamesClass(bool force)
         {
-            var config = Config;
-            string tplPath = config.AssetBundleNamesClassTemplate;
-            if (string.IsNullOrEmpty(tplPath))
-                tplPath = AssetBundleNamesClassTemplatePath;
+            string tplPath = AssetBundleNamesClassTemplatePath;
 
             if (string.IsNullOrEmpty(tplPath))
             {
@@ -1483,90 +2421,89 @@ namespace UnityEditor.Build.AssetBundle
                 return false;
             }
 
-            XmlDocument doc = GetAssetBundleNamesData();
-            string assetBundleNamesClassName = "AssetBundleNames";
-
-            XsltTemplate tpl = new XsltTemplate();
-            tpl.Load(tplPath);
-            tpl.Variables["AssetBundleNamesClass"] = assetBundleNamesClassName;
-            string[] codeFiles = tpl.Transform(doc);
-
-            string hashPath = codeFiles[0] + ".hash";
-            string newHash = codeFiles[0].GetFileHashSHA256();
-            string oldHash = null;
-            if (File.Exists(hashPath))
+            using (var progressBar = new EditorProgressBar($"Generate {EditorAssetBundleSettings.AssetBundleNamesClassSettings.FilePath}"))
             {
-                oldHash = File.ReadAllLines(hashPath)[0];
-            }
-            bool changed = false;
-            if (force || oldHash != newHash)
-                changed = true;
+                string assetBundleNamesClassName = "AssetBundleNames";
+                progressBar.OnProgress($"load  {assetBundleNamesClassName} class data", 0f);
 
-            bool hasError = false;
+                XmlDocument doc = GetAssetBundleNamesData();
 
-            if (!string.IsNullOrEmpty(config.AssetBundleNamesClassFilePath))
-            {
-                if (!Directory.Exists(Path.GetDirectoryName(config.AssetBundleNamesClassFilePath)))
-                    Directory.CreateDirectory(Path.GetDirectoryName(config.AssetBundleNamesClassFilePath));
-                config.AssetBundleNamesClassFilePath.ClearFileAttributes();
-                if (!File.Exists(config.AssetBundleNamesClassFilePath))
+                progressBar.OnProgress($"generate {assetBundleNamesClassName}.cs code file", 0.5f);
+
+                XsltTemplate tpl = new XsltTemplate();
+                tpl.Load(tplPath);
+                tpl.Variables["AssetBundleNamesClass"] = assetBundleNamesClassName;
+                string[] codeFiles = tpl.Transform(doc);
+
+                string hashPath = codeFiles[0] + ".hash";
+                string newHash = codeFiles[0].GetFileHashSHA256();
+                string oldHash = null;
+                if (File.Exists(hashPath))
+                {
+                    oldHash = File.ReadAllLines(hashPath)[0];
+                }
+                bool changed = false;
+                if (force || oldHash != newHash)
                     changed = true;
 
-                if (changed)
+                bool hasError = false;
+
+                string filePath = EditorAssetBundleSettings.AssetBundleNamesClassSettings.FilePath;
+                if (!string.IsNullOrEmpty(filePath))
                 {
-                    if (Path.GetExtension(config.AssetBundleNamesClassFilePath).ToLower() == ".dll")
+
+                    if (!Directory.Exists(Path.GetDirectoryName(filePath)))
+                        Directory.CreateDirectory(Path.GetDirectoryName(filePath));
+                    filePath.FileClearAttributes();
+                    if (!File.Exists(filePath))
+                        changed = true;
+
+                    if (changed)
                     {
-                        string tmpPath = "Temp/" + Path.GetFileName(config.AssetBundleNamesClassFilePath);
-                        if (Directory.Exists(Path.GetDirectoryName(tmpPath)))
-                            Directory.CreateDirectory(Path.GetDirectoryName(tmpPath));
-                        if (CompilerCode(tmpPath, codeFiles, new string[] { typeof(UnityEngine.Object).Assembly.Location }))
+                        if (Path.GetExtension(EditorAssetBundleSettings.AssetBundleNamesClassSettings.FilePath).ToLower() == ".dll")
                         {
-                            changed = tmpPath.CopyFileIfChanged(config.AssetBundleNamesClassFilePath);
-                            if (changed)
+                            string tmpPath = "Temp/" + Path.GetFileName(filePath);
+                            if (Directory.Exists(Path.GetDirectoryName(tmpPath)))
+                                Directory.CreateDirectory(Path.GetDirectoryName(tmpPath));
+
+                            progressBar.OnProgress("compiler code", 0.8f);
+                            if (CompilerCode(tmpPath, codeFiles, new string[] { typeof(UnityEngine.Object).Assembly.Location }))
                             {
-                                Debug.Log("generate file :" + config.AssetBundleNamesClassFilePath);
+                                progressBar.OnProgress("copy to " + filePath, 0.9f);
+                                changed = tmpPath.FileCopyIfChanged(filePath);
                             }
                             else
                             {
-                                Debug.Log("generate file not changed:" + config.AssetBundleNamesClassFilePath);
+                                changed = false;
+                                hasError = true;
                             }
+                            File.Delete(tmpPath);
                         }
                         else
                         {
-                            changed = false;
-                            hasError = true;
-                        }
-                        File.Delete(tmpPath);
-                    }
-                    else
-                    {
-                        changed = codeFiles[0].CopyFileIfChanged(config.AssetBundleNamesClassFilePath);
-                        if (changed)
-                        {
-                            Debug.Log("generate file :" + config.AssetBundleNamesClassFilePath);
-                        }
-                        else
-                        {
-                            Debug.Log("generate file not changed:" + config.AssetBundleNamesClassFilePath);
+                            progressBar.OnProgress("copy to " + filePath, 0.9f);
+                            changed = codeFiles[0].FileCopyIfChanged(filePath);
                         }
                     }
                 }
-            }
 
-            for (int i = 0; i < codeFiles.Length; i++)
-            {
-                codeFiles[i].ClearFileAttributes();
-                Debug.Log("generate file:" + codeFiles[i]);
-            }
+                for (int i = 0; i < codeFiles.Length; i++)
+                {
+                    codeFiles[i].FileClearAttributes();
+                }
 
 
-            if (changed)
-            {
-                if (!hasError)
-                    File.WriteAllText(hashPath, newHash);
-                else
-                    return false;
+                if (changed)
+                {
+                    if (!hasError)
+                        File.WriteAllText(hashPath, newHash);
+                    else
+                        return false;
+                }
+                progressBar.OnProgress("success. generate AssetBundleNames", 1f);
+                Debug.Log(BuildLogPrefix + "generate AssetBundleNames ");
             }
+
             return true;
         }
 
@@ -1607,11 +2544,20 @@ namespace UnityEditor.Build.AssetBundle
             return true;
         }
 
+        public static Dictionary<string, string> OvverideSafeChar = new Dictionary<string, string>()
+        {
+            { "continue","_continue" }
+        };
 
         static string FileNameToSafeChar(string str)
         {
             if (string.IsNullOrEmpty(str))
                 return str;
+
+            string tmp;
+            if (OvverideSafeChar.TryGetValue(str, out tmp))
+                return tmp;
+
             foreach (var ch in new char[] { '#', '-', ' ', '.' })
                 str = str.Replace(ch, '_');
 
@@ -1680,6 +2626,7 @@ namespace UnityEditor.Build.AssetBundle
         #region Utils
 
 
+
         static void CopyFile(string sourceFileName, string destFileName)
         {
 
@@ -1688,8 +2635,7 @@ namespace UnityEditor.Build.AssetBundle
                 string dir = Path.GetDirectoryName(destFileName);
                 if (!Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
-                if (File.Exists(destFileName))
-                    File.SetAttributes(destFileName, FileAttributes.Normal);
+                FileUtil.DeleteFileOrDirectory(destFileName);
                 File.Copy(sourceFileName, destFileName, true);
             }
             catch (Exception ex)
@@ -1704,127 +2650,209 @@ namespace UnityEditor.Build.AssetBundle
 
 
 
-        private static Regex formatStringRegex = new Regex("(?<!\\{)\\{\\$([^}:]*)(:([^}]*))?\\}(?!\\})");
-
-
-        /// <summary>
-        /// format:{$name:format} 
-        /// </summary>
-        /// <param name="input"></param>
-        /// <param name="values"></param>
-        /// <returns></returns>
-        private static string FormatString(string input, IFormatProvider formatProvider, Dictionary<string, object> values)
+        static string GetFormatValue(Dictionary<string, object> values, string key)
         {
-            string result;
-
-            result = formatStringRegex.Replace(input, (m) =>
+            object value;
+            if (!values.TryGetValue(key, out value))
+                return null;
+            string str = null;
+            if (value != null)
             {
-                string paramName = m.Groups[1].Value;
-                string format = m.Groups[3].Value;
-                object value;
-                string ret = null;
-
-                if (string.IsNullOrEmpty(paramName))
-                    throw new FormatException("format error:" + m.Value);
-
-                if (!values.TryGetValue(paramName, out value))
-                    throw new ArgumentException("not found param name:" + paramName);
-
-                if (value != null)
-                {
-                    ret = string.Format(formatProvider, "{0:" + format + "}", value);
-                }
+                if (value is IFormatValueProvider)
+                    str = ((IFormatValueProvider)value).GetValue(key);
                 else
-                {
-                    ret = string.Empty;
-                }
-
-                return ret;
-            });
-            return result;
+                    str = value.ToString();
+            }
+            return str;
         }
-        /// <summary>
-        /// string.format format:/(regex expression)/
-        /// 正则表达式提取字符串中的第一个匹配组
-        /// </summary>
-        /// <example>
-        ///<see cref="string.Format"/>( <see cref="Instance"/>, "{0:/(he.*ld)/}", "say hello world .")
-        /// output: hello world
-        /// </example>
-        class StringRegexFormatProvider : IFormatProvider, ICustomFormatter
-        {
-            private static StringRegexFormatProvider instance;
-            private static Regex regex = new Regex("^/([^/]*)/([igm]*)$");
 
-            public static StringRegexFormatProvider Instance
+        public static void Release()
+        {
+            string outputManifestDir = GetOutputPath();
+
+            if (!File.Exists(FormatString(AssetBundleSettings.BuildManifestPath)))
             {
-                get
-                {
-                    if (instance == null)
-                        instance = new StringRegexFormatProvider();
-                    return instance;
-                }
+                Build();
             }
 
+            AssetBundleVersion version = AssetBundleVersion.LoadFromFile(Path.Combine(outputManifestDir, FormatString(AssetBundleSettings.VersionFile)));
+            Dictionary<string, object> formatValues = new Dictionary<string, object>();
+            GetFormatValues(formatValues, version);
 
-            public string Format(string format, object arg, IFormatProvider formatProvider)
+            string releaseDirectory = FormatString(AssetBundleSettings.ReleasePath, formatValues);
+            string releaseManifestDir = Path.GetDirectoryName(FormatString(AssetBundleSettings.DownloadManifestPath, formatValues));
+            releaseManifestDir = Path.Combine(releaseDirectory, releaseManifestDir);
+            CopyToReleasePath(releaseManifestDir);
+            string dstVersionFile = Path.Combine(releaseDirectory, FormatString(AssetBundleSettings.DownloadVersionFile, formatValues));
+            string srcVerstionFile = Path.Combine(outputManifestDir, FormatString(AssetBundleSettings.VersionFile, formatValues));
+            File.Copy(srcVerstionFile, dstVersionFile, true);
+        }
+
+
+
+
+        #region Addressable
+
+        static AssetBundleAddressableAsset addressableAsset;
+        public static AssetBundleAddressableAsset AddressableAsset
+        {
+            get
             {
-                string result = arg.ToString();
-                if (format != null && format.Length > 1)
+                if (!addressableAsset)
                 {
-                    var regexMatch = regex.Match(format);
-                    if (regexMatch.Success)
-                    {
-                        string pattern = regexMatch.Groups[1].Value;
-                        string vars = regexMatch.Groups[2].Value;
-                        RegexOptions optons = RegexOptions.None;
-                        if (vars.IndexOf('i') >= 0 || vars.IndexOf('I') >= 0)
-                            optons |= RegexOptions.IgnoreCase;
-                        if (vars.IndexOf('m') >= 0 || vars.IndexOf('M') >= 0)
-                            optons |= RegexOptions.Multiline;
-                        bool global = false;
-                        if (vars.IndexOf('g') >= 0 || vars.IndexOf('G') >= 0)
-                            global = true;
-                        Regex regex = new Regex(pattern, optons);
-                        string matchResult = string.Empty;
-                        if (global)
-                        {
-                            foreach (Match m in regex.Matches(result))
-                            {
-                                if (m.Groups.Count > 0)
-                                {
-                                    matchResult = matchResult + m.Groups[1].Value;
-                                }
-                            }
-                        }
-                        else
-                        {
-                            var m = regex.Match(result);
-                            if (m != null && m.Groups.Count > 0)
-                            {
-                                matchResult = m.Groups[1].Value;
-                            }
-                        }
+                    string addressableBundleAssetPath = AssetBundles.AddressableAssetPath;
 
-                        return matchResult;
+                    if (File.Exists(addressableBundleAssetPath))
+                    {
+                        addressableAsset = AssetDatabase.LoadAssetAtPath<AssetBundleAddressableAsset>(addressableBundleAssetPath);
+                    }
+
+                    if (!addressableAsset)
+                    {
+                        addressableAsset = ScriptableObject.CreateInstance<AssetBundleAddressableAsset>();
+                        AssetDatabase.CreateAsset(addressableAsset, addressableBundleAssetPath);
+                        AssetDatabase.SaveAssets();
                     }
                 }
-
-                if (arg is IFormattable)
-                    return ((IFormattable)arg).ToString(format, CultureInfo.CurrentCulture);
-                else if (arg != null)
-                    return arg.ToString();
-                else
-                    return string.Empty;
-            }
-
-            public object GetFormat(Type formatType)
-            {
-                if (formatType == typeof(ICustomFormatter))
-                    return this;
-                return null;
+                return addressableAsset;
             }
         }
-    }
 
+
+        public static void CreateAddressableAsset(List<AssetBundleBuild> list)
+        {
+
+            var asset = AddressableAsset;
+            asset.assets.Clear();
+
+            foreach (var item in list)
+            {
+                for (int i = 0; i < item.assetNames.Length; i++)
+                {
+                    AssetBundleAddressableAsset.AssetInfo assetInfo = new AssetBundleAddressableAsset.AssetInfo();
+                    assetInfo.assetName = item.assetNames[i];
+                    assetInfo.guid = AssetDatabase.AssetPathToGUID(item.assetNames[i]);
+                    assetInfo.bundleName = item.assetBundleName;
+                    if (item.addressableNames != null && i < item.addressableNames.Length)
+                        assetInfo.assetName = item.addressableNames[i];
+                    asset.assets.InsertSorted(assetInfo);
+                }
+                //asset.bundles.Add(bundleInfo);
+            }
+
+            EditorUtility.SetDirty(asset);
+            AssetDatabase.SaveAssets();
+        }
+
+        #endregion
+
+        #region AssetBundle Group
+
+
+
+        public static string GetAssetName(AssetBundleGroup g, string assetPath)
+        {
+            var item = FindGroupItem(g, assetPath);
+            return GetAssetName(item, assetPath);
+        }
+
+        public static string GetAssetName(AssetBundleGroup.BundleItem item, string assetPath)
+        {
+
+            string assetName;
+            if (item != null)
+            {
+                if (!string.IsNullOrEmpty(item.assetName))
+                {
+                    assetName = BuildAssetBundles.FormatString(item.assetName, assetPath);
+                    if (item.assetNameToLower)
+                        assetName = assetName.ToLower();
+                    return assetName;
+                }
+            }
+            return BuildAssetBundles.GetAddressableName(assetPath);
+        }
+
+        public static AssetBundleGroup FindGroup(string assetPath, out AssetBundleGroup.BundleItem item)
+        {
+            string guid = AssetDatabase.AssetPathToGUID(assetPath);
+            for (int i = EditorAssetBundleSettings.Groups.Length - 1; i >= 0; i--)
+            {
+                var g = EditorAssetBundleSettings.Groups[i].Asset as AssetBundleGroup;
+                if (!g)
+                    continue;
+
+                bool matching = false;
+
+                for (int j = g.items.Count - 1; j >= 0; j--)
+                {
+                    var it = g.items[j];
+
+                    if (IsMatch(it, assetPath))
+                    {
+                        matching = true;
+                        if (it.excludeGuids.Contains(guid))
+                            break;
+                        item = it;
+                        return g;
+                    }
+                }
+                if (matching)
+                    break;
+            }
+            item = null;
+            return null;
+        }
+
+        public static AssetBundleGroup.BundleItem FindGroupItem(AssetBundleGroup g, string assetPath)
+        {
+            for (int i = g.items.Count - 1; i >= 0; i--)
+            {
+                var item = g.items[i];
+                if (IsMatch(item, assetPath))
+                    return item;
+            }
+            return null;
+        }
+        public static bool IsMatch(AssetBundleGroup.BundleItem item, string assetPath)
+        {
+            if (string.IsNullOrEmpty(item.include))
+            {
+                return false;
+            }
+
+            return AssetBundles.IsMatchIncludeExclude(assetPath, item.include, item.exclude);
+        }
+
+
+        public static void ValidateGroup()
+        {
+            string[] localBundles = AssetDatabase.GetAllAssetBundleNames().Where(o => AssetBundles.IsBundleGroup(o, LocalGroupName)).ToArray();
+            bool hasError = false;
+
+            foreach (var localBundle in localBundles)
+            {
+                foreach (var dep in AssetDatabase.GetAssetBundleDependencies(localBundle, true))
+                {
+                    if (!AssetBundles.IsBundleGroup(dep, LocalGroupName))
+                    {
+                        Debug.LogError(BuildLogPrefix + $"<{localBundle}> bundle dependency <{dep}>");
+                        hasError = true;
+                    }
+                }
+            }
+
+            if (hasError)
+                throw new Exception($"{LocalGroupName} bundle can't dependency group bundle");
+        }
+
+        static void RequireLocalGroup()
+        {
+            if (!EditorAssetBundleSettings.LocalGroup)
+                throw new Exception("local group null");
+        }
+        #endregion
+
+
+    }
 }

@@ -2,148 +2,116 @@
 
 
 
-﻿####菜单
+## 预览
 
-###### Build/AssetBundles
+
+![Settings](Doc\settings.png)
+
+
+
+![Group](Doc\group.PNG)
+
+
+
+## 菜单
+
+菜单位置 Build/AssetBundles
 
 - **Build**
 
   生成 AssetBundle
 
-- **Edit Config**
+- **Settings**
 
-  编辑配置，为资源文件生成 AssetBundleName 和 Variant
+  编辑配置，为AssetBundle生成 AssetBundleName 和 Variant
 
-- **Open Output Path**
+- **运行模式**
 
-  打开生成AssetBundle位置，在配置OutputPath中指定
+  - **Editor Mode**
 
-- **Update All AssetBundle Names**
+    默认，只在编辑器环境中生效，直接加载 AssetBundleName 的资源，不用预先生成资源包
 
-  为 Assets 目录下所有资源文件重新生成AssetBundleName，在Unity编辑器首次启动时也会自动执行一次。
+  - **Build Mode**
+
+    只在编辑器环境中生效，需要生成资源包，从生成`输出目录`中加载AssetBundle，可以在编辑器中验证生成的资源包是否正确
+
+  - **Download Mode**
+
+    和真机运行时环境一样，如果有下载地址检查版本更新，检查真机运行时资源是否正确
 
 - **Analysis**
 
-  运行时查看 AssetBundle 加载状态，优化资源加载和卸载
-
-- **gen AssetBundleNames**
-
-  查找所有带AssetBundleName的资源文件，生成资源名称引用类 AssetBundlesNames.dll。将配置BuildGenerateAssetBundleNamesClass设置为true，Build AssetBundle时会自动生成。
-
-- - [x] **Editor Asset Mode**
-
-  默认勾选，只在编辑器环境中生效，选中时，直接加载项目下对应 AssetBundleName 的资源，可提高开发效率。不勾选时，和真机运行时环境一样，真实加载AssetBundle，可以验证生成的资源包是否正确和优化资源加载
+  运行时查看 AssetBundle 加载状态，资源引用信息，优化资源加载和卸载
 
   
 
 
 
-#### 配置文件
+## 配置
 
-**ProjectSettings/AssetBundleConfig.json**
+1. 点击菜单 `Build/AssetBundles/Settings` 打开配置面板
 
-自动完成对资源的 AssetBundleName 和 Variant 设置
+   配置文件生成位置 `<Project>/PojectSettings/AssetBundle.json`
 
+2. 勾选 `开启` 开启该模块
 
+3. 配置 AssetBundle 规则，自动完成对资源的 AssetBundleName 和 Variant 设置
 
-####配置文件格式
+   - 资源包名称
 
-**AssetBundleConfig.json**
+     默认为文件夹名：`{$AssetPath:#DirectoryName}`
 
-```
-{
-	"OutputPath":"AssetBundles/{$Platform}",
-	"BuildCopyTo": "Assets/StreamingAssets/AssetBundles/{$Platform}",
-	"AssetBundleName": "{$Directory}",
-  	"AssetBundleNamesClassFilePath": "Assets/Plugins/gen/AssetBundleNames.dll",
-	"AssetBundleNamesClassName": "{$Directory}",
-  	"BuildGenerateAssetBundleNamesClass": true,
-  	"IgnorePaths": [ "/Assets/StreamingAssets/" ],
-  	"Items": [
-   	{
-    	"Directory": "Assets/AssetBundles",
-     	"AssetBundleName": "{$Directory}",
-     	"AssetClass": "{$Directory}"
-    }]
-}
-```
+   - 资源名称
+
+     默认为 Assets 路径，`{$AssetPath}`
+
+4. 设置排除路径 `排除目录`
+
+   默认
+
+   - `/Assets/StreamingAssets/*`
+   - `*/Resources/*`
+   
+   
 
 
 
-**OutputPath**
+- 更新所有 Bundle 名称
 
-  	AssetBundle 文件生成目录
+  为 Assets 目录下所有资源文件重新生成AssetBundleName，在Unity编辑器首次启动时也会自动执行一次。
 
-**BuildCopyTo**
+- 移除未使用的 Bundle 名称
 
-​	生成AssetBundle 时同时从OutputPath复制到该目录
+  移除未使用的AssetBundle 名称
 
-**AssetBundleName**
+- 生成 AssetBundleNames.dll
 
-​	默认的 AssetBundle 名称
+  查找所有带AssetBundleName的资源文件，生成资源名称引用类 AssetBundlesNames.dll。勾选AssetBundleNames类，构建 AssetBundle 时会自动生成。
 
-**IgnorePaths**
 
-​	忽略的目录
 
-**AssetBundleNamesClassFilePath**
+**目录**
 
-​	生成 AssetBundleNames.dll 位置
+- 输出
 
-**BuildGenerateAssetBundleNamesClass**
+  打开构建输出目录，配置属性 `构建路径`
 
-​	Build 时生成 AssetBundleNames.dll
+- 本地
 
-**AssetBundleNamesClassName**
+  打开下载的本地目录
 
-​	默认 AssetName 类名
+- StreamingAssets
 
-**Items**
-
-**Directory**
-
-​	包含的资源的目录
-
-**Pattern**
-
-​	正则表达式，用于筛选 Directory 下的文件
-
-**AssetBundleName**
-
-​	AssetBundle 名称
-
-**AssetClass**
-
-​	AssetName 类名
-
-**AssetName**
-
-​	资源名称，对应生成AssetBundle时的 AddressableName，默认为 AssetPath，可重写
-
-**Preloaded**
-
-​	是否为预加载资源
-
-**Ignore**
-
-​	是否忽略该目录
-
-**Variants**
-
-​	资源的 Variant 名称
-
-**Tag**
-
-​	给资源添加标签，多个标签使用 "," 隔开，在 AssetBundleNames/AssetBundleAttribute.Tags 获取，扩展自定义逻辑处理
+  打开 StreamingAssets AssetBundle 目录，配置属性 StreamingAssetsPath
 
 
 
 
 
-#### 参数变量格式
+### 参数格式
 
 ```
-${variable:format}
+{$variable:format}
 ```
 
 全局 variable
@@ -156,57 +124,513 @@ ${variable:format}
 
   编辑器平台名 BuildTarget 对应运行时的 RuntimePlatform
 
-  比如：Windows,Android,iOS
-
-AssetPath 支持的 variable
-
-  样例 Assets/Dir/file1_en.png
+  比如：Windows, Android, iOS
 
 - **AssetPath**
 
   返回完整 AssetPath
 
-  结果：Assets/Dir/file1_en.png
+**详细说明**
 
-- **Directory**
-
-  返回目录名
-
-  结果：Dir
-
-- **AssetName**
-
-  返回文件名不包含扩展名
-
-  结果: file1_en
-
-- **FileName**
-
-  返回文件名
-
-  结果: file1_en.png
-
-- **FileExtension**
-
-  返回文件扩展名
-
-  结果: .png
-
-**format**
-
-- **/regex/**
-
-  使用正则表达式提取字符串，提取内容为第一个匹配组
-
-  {$AssetName:/(.*)_en/} 
-
-  结果: file1
+​	[String Format](../System.StringFormat/README.md)
 
 
 
-#### **[AssetBundle Info]** 预览面板
+#### 常用格式
 
-快速验证 **AssetBundleConfig.json** 配置是否正确, 选中某个资源，在 **[Inspector]** 下方预览窗口标题选中 **[AssetBundle Info]**
+```
+{$AssetPath:#DirectoryPath}
+```
+
+  文件夹路径，`Assets/...`
+
+```
+{$AssetPath:#DirectoryPath,-1}
+```
+
+  文件夹路径，`...`
+
+```
+{$AssetPath:#DirectoryName}
+```
+
+  文件夹名
+
+```
+{$AssetPath:#DirectoryPath}/{$AssetPath:#FileNameWithoutExtension}
+```
+
+  文件夹路径/文件名(不带扩展名)
+
+
+
+### 配置 link.xml
+
+```xml
+<assembly fullname="UnityEngine.Coroutines">
+	<type fullname="UnityEngine.Coroutines.UnityCoroutineScheduler" preserve="all"/>
+</assembly>
+```
+
+
+
+
+## 初始化
+
+```c#
+//设置 RuntimePlatform
+#if UNITY_ANDROID
+	AssetBundles.Platform = RuntimePlatform.Android;
+#elif UNITY_IOS
+	AssetBundles.Platform = RuntimePlatform.IPhonePlayer;
+#endif
+
+//变体
+//AssetBundles.Variants.Add("<变体>");
+
+//初始化
+yield return AssetBundles.InitializeAsync(); 
+```
+
+
+
+## 使用
+
+### 初始化
+
+```c#
+Task<string> InitializeAsync()
+```
+
+根据 AssetBundleMode 初始化，初始化完成后通过 AssetBundles.ManifestUrl 获取当前资源地址
+
+
+
+#### 初始化流程
+
+1. 下载 `根版本文件` 获得最新版本号
+
+   如果设置了`AssetBundleSettings.DownloadUrl` 则开始下载，否则跳过下载
+
+2. 根据版本号下载远程清单到本地
+
+3. 加载本地清单文件
+
+   本地清单位于 Application.persistentDataPath/AssetBundleSettings.LocalPath
+
+4. 预加载
+
+5. 初始化完成
+
+    
+
+
+
+### 加载
+
+```c#
+T LoadAsset<T>(string assetBundleName, string assetName, object owner)
+Task<T> LoadAssetAsync<T>(string assetBundleName, string assetName)
+```
+- **assetBundleName**
+
+​	AssetBundle 名称，小写
+
+- **assetName**
+
+​	资源名称，支持（路径、文件名、文件名不含扩展名) 
+
+- **owner**
+
+  AssetBundle 生存期管理对象，如果内存中没有对 owner 的引用则可以调用 UnloadUnused 来释放已加载的AssetBundle，在 AssetBundle Analysis 窗口可以查看 owner 的引用状态
+  
+- **T**
+
+​	资源类型
+加载 assetName 资源，如果资源的 AssetBundle 未加载则加载 assetBundleName AssetBundle 再加载资源
+
+**样例**
+
+```c#
+AssetBundles.LoadAsset<GameObject>("<BundleName>", "<AssetName>");
+
+//使用AssetBundleNames 访问
+AssetBundles.LoadAsset<GameObject>(AssetBundleNames.<BundleName>.<AssetName>);
+AssetBundles.LoadAsset<GameObject>(AssetBundleNames.<BundleName>_AssetBundle, "<AssetName>");
+```
+
+
+
+异步加载
+
+```c#
+//使用协程方式
+var prefabTask = AssetBundles.LoadAssetAsync<GameObject>("<BundleName>", "<AssetName>");
+yield return prefabTask;
+//获取返回值：prefabTask.Result
+
+//使用回调方式
+AssetBundles.LoadAssetAsync<GameObject>("<BundleName>", "<AssetName>")
+	.ContinueWith(t =>
+	{
+		//获取返回值：t.Result
+	});
+```
+
+
+
+#### 定制资源加载类
+
+```c#
+Assets.Prefab.Effect.Load<GameObject>("<AssetName>");
+Assets.Prefab.Character.Instantiate("<AssetName>");
+```
+
+
+
+##### 定义资源接口
+
+已定义: UnityEngine.Game.IAssetLoader
+
+```c#
+public interface IAssetLoader
+{
+	UnityEngine.Object Load(string assetName, Type assetType);
+}
+```
+
+##### 实现资源接口
+
+AssetBundles 加载
+
+```c#
+class AssetBundlesLoader : IAssetLoader
+{
+    public string assetNamePrefix;
+
+    public AssetBundlesLoader(string assetNamePrefix)
+    {
+    	this.assetNamePrefix = assetNamePrefix ?? string.Empty;
+    }
+
+    public UnityEngine.Object Load(string assetName, Type assetType)
+    {
+	    return AssetBundles.LoadAsset(assetNamePrefix + assetName, assetType);
+    }
+}
+```
+
+已实现：UnityEngine.Game.ResourcesLoader
+
+
+
+
+##### 资源类
+
+```c#
+public class Assets
+{
+    public class Prefab
+    {
+        public readonly static IAssetLoader Character = new AssetBundlesLoader("Assets/Src/Prefabs/Character/");
+        public readonly static IAssetLoader Effect = new AssetBundlesLoader("Assets/Src/Prefabs/Effect/");
+    }
+
+    public readonly static IAssetLoader Data = new AssetBundlesLoader("Assets/Src/Data/");
+
+    public readonly static IAssetLoader Config = new AssetBundlesLoader("Assets/Src/Config/");
+}
+```
+
+
+
+
+
+
+
+### 实例化
+
+```c#
+GameObject Instantiate(string assetBundleName, string assetName)
+Task<GameObject> InstantiateAsync(string assetBundleName, string assetName)
+```
+
+实例化资源
+
+**样例**
+
+```c#
+GameObject go = AssetBundles.Instantiate("<BundleName>", "<AssetName>");
+```
+异步实例化
+
+```c#
+var goTask = AssetBundles.InstantiateAsync("<BundleName>", "<AssetName>");
+yield return goTask; //goTask.Result
+```
+
+
+
+### 卸载
+
+```c#
+void UnloadUnused(IEnumerable<string> assetBundleNames, bool allObjects = false)
+```
+
+- **assetBundleNames**
+
+
+​	释放指定的 AssetBundle
+
+- **allObjects**
+
+​	将传递给 AssetBundle.Unload(allObjects)
+释放未使用的AssetBundle，未使用的判断依据是检查是否存在引用 LoadAsset 时传递的 Owner 参数
+
+**样例**
+
+```c#
+//加载AssetBundle
+AssetBundles.LoadAssetBundle("<BundleName>");
+//卸载AssetBundle
+AssetBundles.UnloadUnused("<BundleName>");
+```
+
+
+
+
+
+## 资源规则
+
+- Shader资源
+  - 避免对内置 Shader 引用，资源路径为 `Resources/xxxx`，在官网下载 `builtin_shaders-xxxxxx.zip`，解压到工程内，使用工具替换已有的材质球shader
+  - Shader单独打包会丢失变体 feature
+    - feature 关键字存储在材质球，Shader与Material在同一个资源包
+    - 使用 Shader Variant Collection 收集变体，菜单 Edit > Project Settings > Graphics Currently tracked xxx variants 点击 `Save to asset...` , 该文件与shader在同一个资源包
+
+
+
+## 资源加载规则
+
+- 加载资源包内Shader，手动加载
+- 资源包资源引用Resources资源，生成时加入自动依赖资源包
+
+
+
+## 资源名称类
+
+由程序自动生成，便捷的获取资源路径，不用将资源路径硬编码在代码中
+
+1. 勾选 `AssetBundleNames Class` 开启生成
+
+2. `File Path` 设置生成位置
+
+  默认值: `Assets/Plugins/gen/AssetBundleNames.dll`
+
+3. `Asset Name Class` 设置默认类名
+
+  默认值: `{$AssetPath:#DirectoryName}`
+
+4. 点击菜单 `gen AssetBundleNames` 生成 `AssetBundleNames.dll`
+
+
+
+类结构
+
+```c#
+class AssetBundleNames{
+    string <BundleName>_AssetBundle = "<BundleName>";
+    class <BundleName> {
+		string[] <AssetName> = new string[] {<BundleName>_AssetBundle, "<AssetName>"};
+		...
+    }
+    ...
+}
+```
+
+程序使用
+
+```c#
+AssetBundles.LoadAsset<T>(AssetBundleNames.<BundleName>.<AssetName>);
+```
+
+
+
+## 预加载
+
+AssetBundle 在初始化中提前加载，加载后的资源可以使用同步方法
+
+2. 勾选 `预加载`  开启
+2. 设置 `包含`与 `排除` 项，值为正则表达式格式
+3. 预加载状态
+
+   - AssetBundles.Status
+  - Preloading
+   
+    预加载中
+   
+  - Preloaded
+   
+    预加载完成时状态
+	
+	  - AssetBundles.PreloadedTotal
+	
+	    预加载资源总数
+	
+	  - AssetBundles.PreloadedProgress
+	
+	    当前已加载资源数
+	
+
+
+
+## 变体
+
+设置资源多个版本
+
+比如性能版本：high, middle, low
+
+
+
+1. `项/变体` 点击右边 `+` 按钮 添加变体配置
+
+2. 设置 `变体` 名称，正则表达式格式
+
+   ​	文件夹名称
+
+   ```c#
+   {$AssetPath:#DirectoryName}
+   ```
+
+   ​	正则表达式，result 组返回值
+
+   ```c#
+   {$AssetPath:#FileNameWithoutExtension:/.*_(?<result>.+$)/}
+   ```
+
+3. 设置 `过滤`，路径模式过滤
+
+4. 程序配置
+
+   ```c#
+   //设置变体
+   AssetBundles.Variants.Add("<Variant>");
+   ```
+
+
+
+## 解压
+
+未实现
+
+
+
+
+
+
+## 加密
+
+保护资源，因为是对称加密，密匙保存在包体中可被破解
+
+- 编辑器设置
+
+	1. 勾选 `加密` 开启加密
+
+	2. 设置 `加密密匙`，`加密 IV`，点击 `Gennerate` 按钮生成随机加密Key
+
+	3. 设置加密过滤，如果 `包含` 和 `排除` 为空则默认所有都进行加密，值为正则表达式格式
+
+
+
+## 签名
+
+​	防止资源被串改，比如数据
+
+- 编辑器设置
+
+	1. 勾选 `签名` 开启签名
+2. 设置 `签名Key路径` 点击 `Create` 按钮生成
+	3. 设置签名公匙
+4. 设置签名过滤 `包含` 和 `排除`，值为正则表达式格式
+
+
+## 版本
+
+版本文件
+
+位置：清单位置
+
+#### 版本文件
+
+```
+<Platform>.json
+```
+
+```json
+{
+    "platform": "<平台名称>",
+    "bundleCode": <资源版本号>,
+    "appVersion": "<应用版本号>",
+    "timestamp": "<UTC时间戳>",
+    "hash": "<清单哈希值(MD5)>",
+    "commitId": "<Git提交ID>",
+    "userData": "<用户数据>",
+    "channel": "<渠道>",
+    "groups": ["<local>","<remote>"]
+}
+```
+
+- platform
+
+  平台名称: Android, iOS, Windows
+
+- bundleCode
+
+  版本号, 从1开始
+
+- appVersion
+
+  应用版本号 `Application.version`，编辑器设置 `应用版本格式`
+
+- timestamp
+
+  生成时间戳，UTC毫秒值
+
+- hash
+
+  清单哈希值, 默认MD5值
+
+- commitId
+
+  Git提交ID
+
+- userData
+
+  用户数据
+
+- channel
+
+  渠道
+
+- groups
+
+  分组，local：本地资源组，remote：远程待下载资源组
+
+
+
+
+
+## 下载更新
+
+[下载更新](Doc/下载更新.md)
+
+
+
+
+
+##  预览面板 [AssetBundle Info]
+
+查看[配置文件](#配置文件)是否正确, 选中某个资源，在 **[Inspector]** 下方预览窗口标题选中 **[AssetBundle Info]**
 
 - **Asset Path**
 
@@ -224,58 +648,3 @@ AssetPath 支持的 variable
 
   是否为预加载资源
 
-
-
-
-
-### 代码说明
-
-```c#
-Task<AssetBundleManifest> DownloadManifestAsync(string manifestUrl)
-```
-
-下载资源清单文件
-
-**manifestUrl**
-
-​	清单文件(AssetBundleManifest) url 地址
-
-
-
-```C#
-Task<Object> LoadAssetAsync(string assetBundleName, string assetName, Type type = null, object owner = null)
-```
-
-加载 assetName 资源，如果资源的 AssetBundle 未加载则加载 assetBundleName AssetBundle 再加载资源
-
-**assetBundleName**
-
-​	AssetBundle 名称，小写
-
-**assetName**
-
-​	资源名称，小写（AssetPath、FileName、AssetName文件名不包含扩展名) 
-
-**type**
-
-​	资源类型
-
-**owner**
-
-​	AssetBundle 生存期管理对象，如果内存中没有对 owner 的引用则可以调用 UnloadUnused 来释放已加载的AssetBundle，在 AssetBundle Analysis 窗口可以查看 owner 的引用状态
-
-
-
-```c#
-void UnloadUnused(IEnumerable<string> assetBundleNames, bool allObjects = false)
-```
-
-释放未使用的AssetBundle，未使用的判断依据是检查是否存在引用 Load 时传递的 Owner 参数
-
-**assetBundleNames**
-
-​	释放指定的 AssetBundle
-
-**allObjects** 
-
-​	将传递给 AssetBundle.Unload(allObjects)

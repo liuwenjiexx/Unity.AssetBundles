@@ -5,7 +5,7 @@ using UnityEditor;
 using UnityEngine;
 using System.Linq;
 
-namespace UnityEditor.Build.AssetBundle
+namespace UnityEditor.Build
 { 
 
 

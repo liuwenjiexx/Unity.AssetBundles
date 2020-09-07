@@ -4,9 +4,9 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Video;
 
-namespace UnityEditor.Build.AssetBundle
+namespace UnityEditor.Build
 {
-    [CustomEditor(typeof(Object))]
+    [CustomPreview(typeof(Object))]
     public class AssetBundleInfoPreview : ObjectPreview
     {
         public static bool active;
@@ -50,7 +50,7 @@ namespace UnityEditor.Build.AssetBundle
             value = assetPath;
             GUIDrawValue(new Rect(rect.xMax + labelSpace, r.y, r.width - rect.width - labelSpace, r.height), new GUIContent(value, value));
 
-            value = BuildAssetBundles.GetAddressableName(assetPath).ToLower();
+            value = BuildAssetBundles.GetAddressableName(assetPath);
             r.y += EditorGUIUtility.singleLineHeight;
             rect = GUIDrawLabel(new Rect(r.x, r.y, labelWidth, r.height), new GUIContent("Asset Name: "));
             GUIDrawValue(new Rect(rect.xMax + labelSpace, r.y, r.width - rect.width - labelSpace, r.height), new GUIContent(value, value));
@@ -60,7 +60,8 @@ namespace UnityEditor.Build.AssetBundle
             rect = GUIDrawLabel(new Rect(r.x, r.y, labelWidth, r.height), new GUIContent("Asset Type: "));
             GUIDrawValue(new Rect(rect.xMax + labelSpace, r.y, r.width - rect.width - labelSpace, r.height), new GUIContent(value, value));
 
-            value = BuildAssetBundles.IsPreloadedAssetBundleByAssetpath(assetPath).ToString();
+            string bundleName= AssetDatabase.GetImplicitAssetBundleName(assetPath);
+            value = AssetBundles.IsPreloadedBundle(bundleName).ToString();
             r.y += EditorGUIUtility.singleLineHeight;
             rect = GUIDrawLabel(new Rect(r.x, r.y, labelWidth, r.height), new GUIContent("Preloaded: "));
             GUIDrawValue(new Rect(rect.xMax + labelSpace, r.y, r.width - rect.width - labelSpace, r.height), new GUIContent(value, value));
@@ -106,10 +107,7 @@ namespace UnityEditor.Build.AssetBundle
 
 
         [CustomPreview(typeof(GameObject))]
-        class GameObjectAssetBundleInfo : AssetBundleInfoPreview
-        {
-
-        }
+        class GameObjectAssetBundleInfo : AssetBundleInfoPreview { }
 
         [CustomPreview(typeof(AssetImporter))]
         class AssetImporterAssetBundleInfo : AssetBundleInfoPreview { }

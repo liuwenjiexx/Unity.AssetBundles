@@ -7,13 +7,32 @@ using Object = UnityEngine.Object;
 using System.IO;
 using Coroutines;
 using System.Linq;
+using UnityEngine.SceneManagement;
+using UnityEditor.SceneManagement;
+using UnityEditor.Callbacks;
+using System.Diagnostics;
+using Debug = UnityEngine.Debug;
+using UnityEngine.Localizations;
+using System.Text.RegularExpressions;
 
-namespace UnityEditor.Build.AssetBundle
+namespace UnityEditor.Build
 {
-    class EditorAssetBundles
+    public class EditorAssetBundles
     {
 
-        private const string IsEditorAssetsModeMenu = "Build/AssetBundle/Editor Assets Mode";
+        internal const int BuildMenuPriority = 20;
+        internal const int ModeMenuPriority = BuildMenuPriority + 20;
+        internal const int OtherMenuPriority = ModeMenuPriority + 20;
+
+        public const string MenuPrefix = "Build/AssetBundle/";
+        private const string IsEditorAssetsModeMenu = MenuPrefix + "Editor Mode";
+        private const string IsBuildModeMenu = MenuPrefix + "Build Mode";
+        private const string IsRuntimeModeMenu = MenuPrefix + "Download Mode";
+        private const string OpenBuildDirectoryMenu = MenuPrefix + "Open Build Direcotry";
+        private const string OpenLocalDirectoryMenu = MenuPrefix + "Open Local Direcotry";
+        private const string OpenStreamingAssetsDirectoryMenu = MenuPrefix + "Open StreamingAssets Direcotry";
+
+
         private static Dictionary<string, string[]> assetBundleNameAndVariants = new Dictionary<string, string[]>();
         private static Dictionary<string, Object> cachedAssets;
         private static string[] allAssetBundleNames;
@@ -29,39 +48,155 @@ namespace UnityEditor.Build.AssetBundle
         internal const string PlayerPrefsKeyPrefix = "unity.assetbundles.";
 
         internal const string LogTag = "AssetBundles Editor";
-        internal static ILogger Logger = new UnityEngine.LogExtension.LoggerExtension();
+        [UnityEngine.LogExtension.External.LogExtension]
+        internal static ILogger Logger = Debug.unityLogger;
+        private static LocalizationValues editorLocalizationValues;
+        static Dictionary<string, Regex> regexs;
+        public static Action<string, string> LoadAssetCallback;
 
-        public static bool IsEditorAssetsMode
+        public static string PackageDir
         {
-            get { return PlayerPrefs.GetInt(PlayerPrefsKeyPrefix + "IsEditorAssetsMode", 1) != 0; }
-            set { PlayerPrefs.SetInt(PlayerPrefsKeyPrefix + "IsEditorAssetsMode", value ? 1 : 0); }
+            get => BuildAssetBundles.PackageDir;
+        }
+
+        public static AssetBundleMode Mode
+        {
+            get { return (AssetBundleMode)PlayerPrefs.GetInt(PlayerPrefsKeyPrefix + "AssetBundleMode", (int)AssetBundleMode.Editor); }
+            set { PlayerPrefs.SetInt(PlayerPrefsKeyPrefix + "AssetBundleMode", (int)value); }
+        }
+
+        public static LocalizationValues EditorLocalizationValues
+        {
+            get
+            {
+                if (editorLocalizationValues == null)
+                    editorLocalizationValues = new DirectoryLocalizationValues(Path.Combine(PackageDir, "Editor/Localization"));
+                return editorLocalizationValues;
+            }
         }
 
 
-        [MenuItem(IsEditorAssetsModeMenu)]
+        [MenuItem(IsEditorAssetsModeMenu, priority = ModeMenuPriority)]
         static void IsEditorAssetsMode_Menu()
         {
-            IsEditorAssetsMode = !IsEditorAssetsMode;
+            Mode = AssetBundleMode.Editor;
         }
 
         [MenuItem(IsEditorAssetsModeMenu, validate = true)]
         static bool IsEditorAssetsMode_Menu_Validate()
         {
-            Menu.SetChecked(IsEditorAssetsModeMenu, IsEditorAssetsMode);
+            Menu.SetChecked(IsEditorAssetsModeMenu, Mode == AssetBundleMode.Editor);
             return true;
+        }
+        [MenuItem(IsBuildModeMenu, priority = ModeMenuPriority)]
+        static void IsBuildModeMenu_Menu()
+        {
+            Mode = AssetBundleMode.Build;
+        }
+
+        [MenuItem(IsBuildModeMenu, validate = true)]
+        static bool IsBuildModeMenu_Menu_Validate()
+        {
+            Menu.SetChecked(IsBuildModeMenu, Mode == AssetBundleMode.Build);
+            return true;
+        }
+
+        [MenuItem(IsRuntimeModeMenu, priority = ModeMenuPriority)]
+        static void IsRuntimeMode_Menu()
+        {
+            Mode = AssetBundleMode.Download;
+        }
+
+        [MenuItem(IsRuntimeModeMenu, validate = true)]
+        static bool IsRuntimeMode_Menu_Validate()
+        {
+            Menu.SetChecked(IsRuntimeModeMenu, Mode == AssetBundleMode.Download);
+            return true;
+        }
+        // [MenuItem(OpenBuildDirectoryMenu, priority = OtherMenuPriority)]
+        public static void OpenBuildDirectory_Menu()
+        {
+
+            string path = BuildAssetBundles.GetOutputPath();
+            string manifestPath = Path.Combine(path, Path.GetFileName(path));
+            if (File.Exists(manifestPath))
+                EditorUtility.RevealInFinder(manifestPath);
+            else
+                EditorUtility.RevealInFinder(path);
+        }
+
+        // [MenuItem(OpenLocalDirectoryMenu, priority = OtherMenuPriority)]
+        public static void OpenLocalDirectory_Menu()
+        {
+            string manifestPath = $"{Application.persistentDataPath}/{BuildAssetBundles.FormatString(AssetBundleSettings.LocalManifestPath)}";
+            if (File.Exists(manifestPath))
+                EditorUtility.RevealInFinder(manifestPath);
+            else if (Directory.Exists(Path.GetDirectoryName(manifestPath)))
+                EditorUtility.RevealInFinder(Path.GetDirectoryName(manifestPath));
+            else
+                Debug.Log("not exists path <" + manifestPath + "> click menu [Build/AssetBundle/Runtime Mode]");
+        }
+        // [MenuItem(OpenStreamingAssetsDirectoryMenu, priority = OtherMenuPriority)]
+        public static void OpenStreamingAssetsDirectory_Menu()
+        {
+            string path = BuildAssetBundles.GetStreamingAssetsPath();
+            string manifestPath = Path.Combine(path, Path.GetFileName(path));
+            if (File.Exists(manifestPath))
+                EditorUtility.RevealInFinder(manifestPath);
+            else
+                EditorUtility.RevealInFinder(path);
+        }
+
+
+
+        //[MenuItem(MenuPrefix + "Edit Config", priority = EditorAssetBundles.BuildMenuPriority + 1)]
+        //public static void OpenConfigFile()
+        //{
+        //    BuildAssetBundles.LoadConfig();
+        //    Application.OpenURL(Path.GetFullPath(BuildAssetBundles.ConfigFilePath));
+        //}
+        //  [MenuItem(MenuPrefix + "Remove Unused AssetBundle Names", priority = EditorAssetBundles.OtherMenuPriority)]
+        public static void RemoveUnusedAssetBundleNames()
+        {
+            AssetDatabase.RemoveUnusedAssetBundleNames();
+        }
+        [MenuItem(MenuPrefix + "Help", priority = EditorAssetBundles.OtherMenuPriority + 20)]
+        static void OpenREADME_Menu()
+        {
+            string assetPath = Path.Combine(BuildAssetBundles.PackageDir, "README.md");
+            //  AssetDatabase.OpenAsset(AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(assetPath));
+            Application.OpenURL(Path.GetFullPath(assetPath));
         }
 
         [InitializeOnLoadMethod]
         static void InitializeOnLoadMethod()
         {
-            if (IsEditorAssetsMode)
+            EditorApplication.playModeStateChanged += EditorApplication_playModeStateChanged;
+            UpateLoadHandler();
+        }
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
+        static void RuntimeInitializeOnLoadMethod()
+        {
+            UpateLoadHandler();
+        }
+
+        static void UpateLoadHandler()
+        {
+            if (Mode == AssetBundleMode.Editor || !EditorApplication.isPlayingOrWillChangePlaymode)
             {
                 AssetBundles.LoadAssetHandler = EditorLoadAssetHandler;
-                AssetBundles.LoadAssetAsyncHandler = EditorLoadAssetsAsyncHandler;
+            }
+            else
+            {
+                AssetBundles.LoadAssetHandler = null;
             }
         }
 
-
+        private static void EditorApplication_playModeStateChanged(PlayModeStateChange state)
+        {
+            UpateLoadHandler();
+        }
 
         public static Object GetOrCacheAsset(string assetPath, Type type)
         {
@@ -90,8 +225,11 @@ namespace UnityEditor.Build.AssetBundle
             public Dictionary<string, string> variants = new Dictionary<string, string>();
         }
 
-        private static Object[] EditorLoadAssetHandler(string assetBundleName, string assetName, Type type, object owner)
+        //  private static string[] GetAllAssetPaths(string assetBundleName)
+
+        public static void EditorLoadAssetHandler(AssetBundles.LoadAssetRequest request)
         {
+            //Debug.Log("EditorLoadAssetHandler: " + request.assetBundleName);
             if (allAssetBundleNames == null)
             {
                 allAssetBundleNames = AssetDatabase.GetAllAssetBundleNames();
@@ -116,6 +254,13 @@ namespace UnityEditor.Build.AssetBundle
                 cachedAddressableName = new Dictionary<string, string[]>();
             }
 
+            string assetBundleName;
+            string assetName;
+            Type type;
+            assetBundleName = request.assetBundleName;
+            assetName = request.assetName;
+            type = request.assetType;
+
             assetBundleName = ResolveAssetBundleNameVariant(assetBundleName);
 
             string[] assetPaths = AssetDatabase.GetAssetPathsFromAssetBundle(assetBundleName);
@@ -127,14 +272,17 @@ namespace UnityEditor.Build.AssetBundle
 
             if (assetPaths == null || assetPaths.Length == 0)
             {
-                LogFormat(LogType.Error, "editor load assetBundle fail " + assetBundleName);
-                return new Object[0];
+                //LogFormat(LogType.Error, "editor load assetBundle fail " + assetBundleName);
+                request.loadedAssets = new Object[0];
+                request.Done();
+                return;
             }
 
             if (type == null)
                 type = typeof(Object);
 
             Object[] result = null;
+            string addressableName = null;
             if (string.IsNullOrEmpty(assetName))
             {
                 List<Object> objs = new List<Object>(assetPaths.Length);
@@ -154,12 +302,13 @@ namespace UnityEditor.Build.AssetBundle
                 for (int i = 0; i < assetPaths.Length; i++)
                 {
                     assetPath = assetPaths[i];
+
                     string[] addressableNames;
                     if (!cachedAddressableName.TryGetValue(assetPath, out addressableNames))
                     {
                         addressableNames = new string[3];
-                        var addressableName = BuildAssetBundles.GetAddressableName(assetPath);
-                        string addressableNameLow = addressableName.ToLower();
+                        var _addressableName = BuildAssetBundles.GetAddressableName(assetPath);
+                        string addressableNameLow = _addressableName.ToLower();
                         addressableNames[0] = addressableNameLow;
                         addressableNames[1] = Path.GetFileNameWithoutExtension(addressableNameLow);
                         addressableNames[2] = Path.GetFileName(addressableNameLow);
@@ -172,6 +321,7 @@ namespace UnityEditor.Build.AssetBundle
                         if (obj != null)
                         {
                             result = new Object[] { obj };
+                            addressableName = assetPaths[0];
                             break;
                         }
                     }
@@ -180,24 +330,99 @@ namespace UnityEditor.Build.AssetBundle
 
             if (result == null || result.Length == 0)
             {
-                LogFormat(LogType.Error, "editor load asset bundle fail. assetBundleName: {0}, assetName: {1}, type:{2}", assetBundleName, assetName, type);
+                //LogFormat(LogType.Error, "editor load asset bundle fail. assetBundleName: {0}, assetName: {1}, type:{2}", assetBundleName, assetName, type);
             }
 
-            return result ?? new Object[0];
-        }
+            request.loadedAssets = result ?? new Object[0];
 
-        private static Task<Object[]> EditorLoadAssetsAsyncHandler(string assetBundleName, string assetName, Type type, object owner)
-        {
-            return Task.Run<Object[]>(() =>
+            if (LoadAssetCallback != null && request.loadedAssets.Length > 0)
             {
-                return EditorLoadAssetHandler(assetBundleName, assetName, type, owner);
-            });
+                string assetPath = AssetDatabase.GetAssetPath(request.loadedAssets[0]);
+                LoadAssetCallback?.Invoke(assetBundleName, assetPath);
+            }
+
+
+            if (request.isLoadScene)
+            {
+                EditorLoadSceneHandler(request);
+                return;
+            }
+            request.Done();
         }
 
+
+        private static void EditorLoadSceneHandler(AssetBundles.LoadAssetRequest request)
+        {
+            string sceneName = request.assetName;
+
+            if (request.loadedAssets != null && request.loadedAssets.Length > 0)
+            {
+                Object sceneAsset = request.loadedAssets[0];
+
+
+                string path = AssetDatabase.GetAssetPath(sceneAsset);
+
+                var scenes = EditorBuildSettings.scenes;
+                EditorBuildSettingsScene scene = null;
+                for (int i = 0; i < scenes.Length; i++)
+                {
+                    if (string.Equals(scenes[i].path, path, StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        scene = scenes[i];
+                        break;
+                    }
+                }
+                if (scene == null)
+                {
+                    scene = new EditorBuildSettingsScene(path, true);
+                    AddedScene.Add(path);
+                    scenes = scenes.Concat(new EditorBuildSettingsScene[] { scene }).ToArray();
+                    EditorBuildSettings.scenes = scenes;
+                    AssetDatabase.SaveAssets();
+                }
+
+                //Unloading the last loaded scene xxxx, is not supported. Please use SceneManager.LoadScene()/EditorSceneManager.OpenScene() to switch to another scene.
+                //if (request.isAsync)
+                //{
+
+                //    var async = SceneManager.LoadSceneAsync(sceneName, request.sceneMode);
+                //    async.allowSceneActivation = true;
+                //    EditorApplication.CallbackFunction update = null;
+                //    update = () =>
+                //     {
+                //         request.progress = async.progress;
+                //         if (async.isDone)
+                //         {
+                //             request.Done();
+                //         }
+                //         else
+                //         {
+                //             EditorApplication.delayCall += update;
+                //         }
+                //     };
+
+                //    update();
+                //}
+                else
+                {
+                    SceneManager.LoadScene(sceneName, request.sceneMode);
+                    //SceneManager.SetActiveScene(SceneManager.GetSceneByName(sceneName));
+                }
+            }
+            else
+            {
+                Debug.LogError("not load scene " + request.assetBundleName + ", " + sceneName);
+            }
+            request.Done();
+        }
+
+        static List<string> AddedScene = new List<string>();
 
 
         static string[] ParseAssetBundleNameAndVariant(string assetBundleName)
         {
+            if (string.IsNullOrEmpty(assetBundleName))
+                return new string[] { "", "" };
             string[] nameAndVariant;
             if (!assetBundleNameAndVariants.TryGetValue(assetBundleName, out nameAndVariant))
             {
@@ -239,5 +464,26 @@ namespace UnityEditor.Build.AssetBundle
         {
             Debug.unityLogger.Log(logType, LogTag, string.Format(format, args));
         }
+
+        public static bool IsMatch(string pattern, string text, bool ignoreCase = false)
+        {
+            if (regexs == null)
+                regexs = new Dictionary<string, Regex>();
+            if (string.IsNullOrEmpty(pattern))
+                return true;
+            Regex m;
+            if (!regexs.TryGetValue(pattern, out m))
+            {
+                RegexOptions options = RegexOptions.None;
+                if (ignoreCase)
+                    options |= RegexOptions.IgnoreCase;
+                m = new Regex(pattern, options);
+                regexs[pattern] = m;
+            }
+            return m.IsMatch(text);
+        }
+
+
+
     }
 }

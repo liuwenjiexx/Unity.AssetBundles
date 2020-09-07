@@ -1,12 +1,16 @@
 {
     "name": "Unity.AssetBundles",
-    "references": [],
-    "optionalUnityReferences": [],
+    "references": [
+        "GUID:fac978f3332e7f543bf512365a0ed1ee",
+        "GUID:db720c43602634d4ca658feb53f1c312"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
     "precompiledReferences": [],
     "autoReferenced": true,
-    "defineConstraints": []
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
 }
