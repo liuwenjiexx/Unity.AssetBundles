@@ -1,0 +1,47 @@
+{
+    "enabled": true,
+    "assetBundleName": "{$AssetPath:#DirectoryPath,-1}/bundle_{$AssetPath:#DirectoryName}",
+    "assetName": "{$AssetPath:$DirectoryPath}/{$AssetPath:$FileNameWithoutExtension}",
+    "assetNameToLower": false,
+    "autoDependencyBundleName": "local/auto/bundle_auto",
+    "components": [],
+    "assetValue": "",
+    "options": 0,
+    "streamingAssetsExcludeGroup": "",
+    "bundleCodeResetOfAppVersion": false,
+    "ignorePaths": [
+        "^Assets/StreamingAssets/",
+        "/Resources/"
+    ],
+    "releasePath": "",
+    "assetBundleNamesClass": {
+        "enabled": false,
+        "filePath": "Assets/Plugins/gen/AssetBundleNames.dll",
+        "assetNameClass": "{$AssetPath:#DirectoryName}",
+        "assetBundleNamesClassTemplate": ""
+    },
+    "preBuildPlayer": {
+        "autoBuildAssetBundle": true
+    },
+    "postBuildPlayer": {
+        "clearStreamingAssets": false
+    },
+    "postBuild": {
+        "showFolder": false
+    },
+    "autoDependencySplit": 1,
+    "signatureKeyPath": "",
+    "cryptoKey": "",
+    "cryptoIV": "",
+    "excludeExtensions": [
+        ".cs"
+    ],
+    "excludeTypeNames": [
+        "UnityEditor.MonoScript"
+    ],
+    "excludeDependencyExtensions": [],
+    "localGroup": {
+        "guid": "500fe3ce315a1fd45ad97ccd985be58b"
+    },
+    "groups": []
+}

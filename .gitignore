@@ -16,4 +16,4 @@
 /Assets/Plugins/gen.meta
 /Logs/
 /LogExtension.json
-/ProjectSettings
+/ProjectSettings/*.asset

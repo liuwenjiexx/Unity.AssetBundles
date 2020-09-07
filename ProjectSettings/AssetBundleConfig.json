@@ -1,0 +1,17 @@
+﻿{
+    "OutputPath": "AssetBundles/{$BuildTarget}",
+    "CopyTo": "",
+    "BuildCopyTo": "",
+    "Variants": "",
+    "AssetBundleName": "{$Directory}",
+    "AssetName": "",
+    "AssetBundleNamesClassTemplate": "",
+    "BuildGenerateAssetBundleNamesClass": true,
+    "AssetBundleNamesClassFilePath": "Assets/Plugins/gen/AssetBundleNames.dll",
+    "Components": [],
+    "Items": [],
+    "AssetValue": "",
+    "AssetClass": "",
+    "Options": "",
+    "IgnorePaths": []
+}
