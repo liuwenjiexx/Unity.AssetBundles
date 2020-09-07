@@ -1,0 +1,15 @@
+{
+    "platform": "Windows",
+    "bundleCode": 1,
+    "appVersion": "1.0",
+    "timestamp": 1599494814,
+    "redirectUrl": "",
+    "bundleVersion": "1.0.0",
+    "channel": "Release",
+    "hash": "f48b021c99e064686e6bb95e42944cfa",
+    "commitId": "6a6ab0a",
+    "userData": "",
+    "groups": [
+        "local"
+    ]
+}

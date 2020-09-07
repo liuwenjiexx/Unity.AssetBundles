@@ -1,0 +1,10 @@
+ManifestFileVersion: 0
+CRC: 2307218776
+AssetBundleManifest:
+  AssetBundleInfos:
+    Info_0:
+      Name: local/assets/example/bundle_src
+      Dependencies: {}
+    Info_1:
+      Name: addressable
+      Dependencies: {}

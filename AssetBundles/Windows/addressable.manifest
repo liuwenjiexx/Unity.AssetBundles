@@ -1,0 +1,18 @@
+ManifestFileVersion: 0
+CRC: 193650134
+Hashes:
+  AssetFileHash:
+    serializedVersion: 2
+    Hash: a6f144ba042557bfe86c7fc54a39138e
+  TypeTreeHash:
+    serializedVersion: 2
+    Hash: d632ef484cb78b3f2a6b19afe6365746
+HashAppended: 0
+ClassTypes:
+- Class: 114
+  Script: {fileID: 11500000, guid: d57c46ddcce052445a6b0a34bc054d1a, type: 3}
+- Class: 115
+  Script: {instanceID: 0}
+Assets:
+- Assets/addressable.asset
+Dependencies: []

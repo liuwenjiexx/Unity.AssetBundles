@@ -11,12 +11,9 @@
 /Packages/manifest.json
 /win/
 /Build/
-/AssetBundles/
 /UnityPlayerStub
 /Assets/Plugins/gen/
 /Assets/Plugins/gen.meta
-/Assets/StreamingAssets/
-/Assets/StreamingAssets.meta
 /Logs/
 /LogExtension.json
 /ProjectSettings
