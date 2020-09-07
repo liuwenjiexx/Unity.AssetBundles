@@ -5,11 +5,11 @@
 ## 预览
 
 
-![Settings](Doc\settings.png)
+![Settings](Doc/settings.png)
 
 
 
-![Group](Doc\group.PNG)
+![Group](Doc/group.PNG)
 
 
 

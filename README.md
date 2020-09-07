@@ -5,11 +5,11 @@
 ## 预览
 
 
-![Settings](Assets\Plugins\Unity.AssetBundles\Doc\settings.png)
+![Settings](Assets/Plugins/Unity.AssetBundles/Doc/settings.png)
 
 
 
-![Group](Assets\Plugins\Unity.AssetBundles\Doc\group.PNG)
+![Group](Assets/Plugins/Unity.AssetBundles/Doc/group.PNG)
 
 
 
