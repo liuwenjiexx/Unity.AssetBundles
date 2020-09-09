@@ -17,3 +17,4 @@
 /Logs/
 /LogExtension.json
 /ProjectSettings/*.asset
+/Packages/packages-lock.json
