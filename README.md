@@ -23,7 +23,6 @@
        "unity.extensions": "https://github.com/liuwenjiexx/Unity.Extensions.git?path=/Assets",
        "unity.guiextensions": "https://github.com/liuwenjiexx/Unity.GuiExtensions.git?path=/Assets",
        "unity.localization": "https://github.com/liuwenjiexx/Unity.Localization.git?path=/Assets",
-       "unity.coroutine.extension":"https://github.com/liuwenjiexx/Unity.Extensions.git?path=/Assets",
      	...
      	}
    }
