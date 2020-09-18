@@ -1,7 +1,8 @@
 {
   "dependencies": {   
-    "unity.extensions": "https://github.com/liuwenjiexx/Unity.Extensions.git?path=/Assets",
-    "unity.guiextensions": "https://github.com/liuwenjiexx/Unity.GuiExtensions.git?path=/Assets",
+    "unity.extensions": "https://github.com/liuwenjiexx/Unity.Extensions.git",
+    "system.stringformat": "https://github.com/liuwenjiexx/System.StringFormat.git", 
+    "unity.guiextensions": "https://github.com/liuwenjiexx/Unity.GuiExtensions.git",
     "unity.localization": "https://github.com/liuwenjiexx/Unity.Localization.git?path=/Assets/Plugins/Unity.Localization",
     "com.unity.2d.sprite": "1.0.0",
     "com.unity.2d.tilemap": "1.0.0",
