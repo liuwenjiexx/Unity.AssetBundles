@@ -9,6 +9,7 @@
    ```
 "unity.extensions": "https://github.com/liuwenjiexx/Unity.Extensions.git",
 "unity.guiextensions": "https://github.com/liuwenjiexx/Unity.GuiExtensions.git",
+"system.stringformat": "https://github.com/liuwenjiexx/System.StringFormat.git",
 "unity.localization": "https://github.com/liuwenjiexx/Unity.Localization.git?path=/Assets/Plugins/Unity.Localization",
 "unity.assetbundles": "https://github.com/liuwenjiexx/Unity.AssetBundles.git?path=/Assets/Plugins/Unity.AssetBundles",
    ```
