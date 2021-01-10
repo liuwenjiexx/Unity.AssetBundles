@@ -42,7 +42,7 @@ namespace UnityEditor.Build
         }
 
         [SerializeField]
-        private string assetBundleName = "{$AssetPath:#DirectoryPath,-1}/bundle_{$AssetPath:#DirectoryName}";
+        private string assetBundleName = "{$AssetPath:#DirectoryPath,-1}/{$AssetPath:#DirectoryName}_bundle";
         public static string AssetBundleName
         {
             get => Settings.assetBundleName;

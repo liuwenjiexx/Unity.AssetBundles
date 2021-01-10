@@ -339,23 +339,23 @@ namespace UnityEngine
             public AssetBundle loadedAssetBundle;
             public Object[] loadedAssets;
             public bool isDone { get; private set; }
-            public object owner;
+            public object dependency;
             public float progress;
 
             public override bool KeepWaiting => !isDone;
 
-            internal static LoadAssetRequest FromAssetBundle(string url, string assetBundleName, bool isAsync, object owner)
+            internal static LoadAssetRequest FromAssetBundle(string url, string assetBundleName, bool isAsync, object dependency)
             {
                 LoadAssetRequest loadAssetInfo = new LoadAssetRequest()
                 {
                     url = url,
                     assetBundleName = assetBundleName,
                     isAsync = isAsync,
-                    owner = owner,
+                    dependency = dependency,
                 };
                 return loadAssetInfo;
             }
-            internal static LoadAssetRequest FromAsset(string url, string assetBundleName, string assetName, Type assetType, bool isAsync, object owner)
+            internal static LoadAssetRequest FromAsset(string url, string assetBundleName, string assetName, Type assetType, bool isAsync, object dependency)
             {
                 LoadAssetRequest loadAssetInfo = new LoadAssetRequest()
                 {
@@ -364,7 +364,7 @@ namespace UnityEngine
                     assetName = assetName,
                     assetType = assetType,
                     isAsync = isAsync,
-                    owner = owner,
+                    dependency = dependency,
                 };
                 return loadAssetInfo;
             }
@@ -378,7 +378,7 @@ namespace UnityEngine
                     isLoadScene = true,
                     sceneMode = sceneMode,
                     isAsync = isAsync,
-                    owner = owner,
+                    dependency = owner,
                 };
 
                 return loadAssetInfo;
@@ -481,12 +481,12 @@ namespace UnityEngine
         }
 
 
-        private static Object[] AssetBundleLoadAssetHandler(string assetBundleName, string assetName, Type type, object owner)
+        private static Object[] AssetBundleLoadAssetHandler(string assetBundleName, string assetName, Type type, object dependency)
         {
             if (assetBundleName == null)
                 throw new ArgumentNullException("assetBundleName");
 
-            var assetBundle = LoadAssetBundle(assetBundleName, owner);
+            var assetBundle = LoadBundle(assetBundleName, dependency);
 
             if (!assetBundle)
                 return EmptyObjects;
@@ -512,12 +512,12 @@ namespace UnityEngine
         }
 
 
-        private static Task<Object[]> AssetBundleLoadAssetsAsyncHandler(string assetBundleName, string assetName, Type type, object owner)
+        private static Task<Object[]> AssetBundleLoadAssetsAsyncHandler(string assetBundleName, string assetName, Type type, object dependency)
         {
             if (assetBundleName == null)
                 throw new ArgumentNullException("assetBundleName");
 
-            return LoadAssetBundleAsync(assetBundleName, owner)
+            return LoadAssetBundleAsync(assetBundleName, dependency)
                 .ContinueWith(t =>
                 {
                     var assetBundle = t.Result;
@@ -641,22 +641,22 @@ namespace UnityEngine
             assetBundleNameMapNameHash.Clear();
         }
 
-        public static AssetBundle LoadAssetBundle(string assetBundleName, object owner = null)
+        public static AssetBundle LoadBundle(string bundleName, object lifetime = null)
         {
-            if (assetBundleName == null)
+            if (bundleName == null)
                 throw new ArgumentNullException("assetbundleName");
 
-            var abInfo = GetAssetBundleInfo(assetBundleName);
+            var abInfo = GetAssetBundleInfo(bundleName);
             if (abInfo == null)
                 return null;
             AssetBundle assetBundle;
-            if (!TryGetAssetbundle(abInfo, owner, out assetBundle))
+            if (!TryGetAssetbundle(abInfo, lifetime, out assetBundle))
             {
                 bool handle = false;
 
                 if (LoadAssetBundleHandler != null)
                 {
-                    LoadAssetRequest request = LoadAssetRequest.FromAssetBundle(abInfo.url, assetBundleName, false, owner);
+                    LoadAssetRequest request = LoadAssetRequest.FromAssetBundle(abInfo.url, bundleName, false, lifetime);
                     LoadAssetBundleHandler(request);
                     assetBundle = request.loadedAssetBundle;
                     handle = true;
@@ -691,19 +691,19 @@ namespace UnityEngine
 
                 if (handle)
                 {
-                    OnLoadAssetBundle(abInfo, assetBundle, owner);
+                    OnLoadAssetBundle(abInfo, assetBundle, lifetime);
                     foreach (var dep in abInfo.allDependencies)
                     {
                         AssetBundle tmp;
                         if (!TryGetAssetbundle(dep, null, out tmp))
                         {
-                            LoadAssetBundle(dep.name, null);
+                            LoadBundle(dep.name, null);
                         }
                     }
                 }
                 else
                 {
-                    throw new Exception("assetBoundle not preloaded, name:" + assetBundleName);
+                    throw new Exception("assetBoundle not preloaded, name:" + bundleName);
                 }
             }
 
@@ -714,8 +714,7 @@ namespace UnityEngine
 
 
 
-
-        public static Object LoadAsset(string assetBundleName, string assetName, Type type = null, object owner = null)
+        private static Object LoadAsset(string bundleName, string assetName, Type type = null, object lifetime = null)
         {
 
             Object[] result;
@@ -724,73 +723,49 @@ namespace UnityEngine
                 string url = null;
                 if (mainManifest != null)
                 {
-                    var abInfo = GetAssetBundleInfo(assetBundleName);
+                    var abInfo = GetAssetBundleInfo(bundleName);
                     url = abInfo.url;
                 }
-                LoadAssetRequest request = LoadAssetRequest.FromAsset(url, assetBundleName, assetName, type, false, owner);
+                LoadAssetRequest request = LoadAssetRequest.FromAsset(url, bundleName, assetName, type, false, lifetime);
                 LoadAssetHandler(request);
                 result = request.loadedAssets;
             }
             else
-                result = AssetBundleLoadAssetHandler(assetBundleName, assetName, type, owner);
+                result = AssetBundleLoadAssetHandler(bundleName, assetName, type, lifetime);
 
             if (result.Length == 0)
             {
                 if (!string.IsNullOrEmpty(assetName))
-                    Debug.LogError(LogPrefix + string.Format("load asset bundle fail. assetBundleName: {0}, assetName: {1}, type: {2}", assetBundleName, assetName, type));
+                    Debug.LogError(LogPrefix + string.Format("load asset bundle fail. assetBundleName: {0}, assetName: {1}, type: {2}", bundleName, assetName, type));
                 return null;
             }
             return result[0];
         }
+        [Obsolete]
+        private static T LoadAsset<T>(string assetBundleName, string assetName, object lifetime = null)
+            where T : UnityEngine.Object
+        {
+            return (T)LoadAsset(assetBundleName, assetName, typeof(T), lifetime);
+        }
 
-        public static T LoadAsset<T>(string assetBundleName, string assetName, object owner = null)
-            where T : UnityEngine.Object
-        {
-            return (T)LoadAsset(assetBundleName, assetName, typeof(T), owner);
-        }
-        public static Object LoadAsset(string[] assetBundleAndAssetNames, object owner = null)
-        {
-            return LoadAsset(assetBundleAndAssetNames[0], assetBundleAndAssetNames[1], null, owner);
-        }
-        public static T LoadAsset<T>(string[] assetBundleAndAssetNames, object owner = null)
-            where T : UnityEngine.Object
-        {
-            return LoadAsset<T>(assetBundleAndAssetNames[0], assetBundleAndAssetNames[1], owner);
-        }
-        public static T Instantiate<T>(string assetBundleName, string assetName, object owner = null)
+
+        [Obsolete]
+        private static T Instantiate<T>(string assetBundleName, string assetName, object lifetime = null)
         where T : Object
         {
-            var obj = LoadAsset<T>(assetBundleName, assetName, owner);
+            var obj = LoadAsset<T>(assetBundleName, assetName, lifetime);
             if (!obj)
                 return null;
             return Object.Instantiate(obj);
         }
-        public static T Instantiate<T>(string[] assetBundleAndAssetNames, object owner = null)
+
+        private static T Instantiate<T>(string[] assetBundleAndAssetNames, object lifetime = null)
             where T : Object
         {
-            return Instantiate<T>(assetBundleAndAssetNames[0], assetBundleAndAssetNames[1], owner);
-        }
-        public static GameObject Instantiate(string assetBundleName, string assetName, object owner = null)
-        {
-            var obj = LoadAsset<GameObject>(assetBundleName, assetName, owner);
-            if (!obj)
-                return null;
-            return Object.Instantiate(obj);
-        }
-        public static GameObject Instantiate(string assetBundleName, string assetName, Transform parent, object owner = null)
-        {
-            var obj = LoadAsset<GameObject>(assetBundleName, assetName, owner);
-            if (!obj)
-                return null;
-            return Object.Instantiate(obj, parent);
+            return Instantiate<T>(assetBundleAndAssetNames[0], assetBundleAndAssetNames[1], lifetime);
         }
 
-        public static GameObject Instantiate(string[] assetBundleAndAssetNames, object owner = null)
-        {
-            return Instantiate(assetBundleAndAssetNames[0], assetBundleAndAssetNames[1], owner);
-        }
-
-        public static Object[] LoadAllAssets(string assetBundleName, Type type = null, object owner = null)
+        public static Object[] LoadAllAssets(string assetBundleName, Type type = null, object dependency = null)
         {
             Object[] result;
             if (LoadAssetHandler != null)
@@ -801,44 +776,44 @@ namespace UnityEngine
                     var abInfo = GetAssetBundleInfo(assetBundleName);
                     url = abInfo.url;
                 }
-                LoadAssetRequest request = LoadAssetRequest.FromAsset(url, assetBundleName, null, type, false, owner);
+                LoadAssetRequest request = LoadAssetRequest.FromAsset(url, assetBundleName, null, type, false, dependency);
                 LoadAssetHandler(request);
                 result = request.loadedAssets;
             }
             else
-                result = AssetBundleLoadAssetHandler(assetBundleName, null, type, owner);
+                result = AssetBundleLoadAssetHandler(assetBundleName, null, type, dependency);
             return result;
         }
-        public static T[] LoadAllAssets<T>(string assetBundleName, object owner = null)
+        public static T[] LoadAllAssets<T>(string assetBundleName, object dependency = null)
             where T : Object
         {
-            return LoadAllAssets(assetBundleName, typeof(Object), owner).Where(o => o is T).Cast<T>().ToArray();
+            return LoadAllAssets(assetBundleName, typeof(Object), dependency).Where(o => o is T).Cast<T>().ToArray();
         }
 
-        public static Object[] LoadAllAssets(string[] assetBundleAndAssetNames, Type type = null, object owner = null)
+        public static Object[] LoadAllAssets(string[] assetBundleAndAssetNames, Type type = null, object dependency = null)
         {
-            return LoadAllAssets(assetBundleAndAssetNames[0], type, owner);
+            return LoadAllAssets(assetBundleAndAssetNames[0], type, dependency);
         }
-        public static T[] LoadAllAssets<T>(string[] assetBundleAndAssetNames, object owner = null)
+        public static T[] LoadAllAssets<T>(string[] assetBundleAndAssetNames, object dependency = null)
           where T : UnityEngine.Object
         {
-            return LoadAllAssets<T>(assetBundleAndAssetNames[0], owner);
+            return LoadAllAssets<T>(assetBundleAndAssetNames[0], dependency);
         }
 
 
         #region Async
 
 
-        public static Task<AssetBundle> LoadAssetBundleAsync(string assetBundleName, object owner = null)
+        public static Task<AssetBundle> LoadAssetBundleAsync(string bundleName, object dependency = null)
         {
-            if (assetBundleName == null)
+            if (bundleName == null)
                 throw new ArgumentNullException("assetbundleName");
-            var abInfo = GetAssetBundleInfo(assetBundleName);
-            return Task.Run<AssetBundle>(StartDownloadAssetBundle(abInfo, owner));
+            var abInfo = GetAssetBundleInfo(bundleName);
+            return Task.Run<AssetBundle>(StartDownloadAssetBundle(abInfo, dependency));
         }
-        public static Task<AssetBundle> LoadAssetBundleAsync(string[] assetBundleAndAssetNames, object owner = null)
+        public static Task<AssetBundle> LoadAssetBundleAsync(string[] assetBundleAndAssetNames, object dependency = null)
         {
-            return LoadAssetBundleAsync(assetBundleAndAssetNames[0], owner);
+            return LoadAssetBundleAsync(assetBundleAndAssetNames[0], dependency);
         }
         //public static Task<AssetBundle> LoadAssetBundleAsync(string assetBundleName, object owner, DownloadAssetBundleCompletedDelegate onCompleted, DownloadAssetBundleFailDelegate onFaulted = null)
         //{
@@ -862,7 +837,7 @@ namespace UnityEngine
         //{
         //    return LoadAssetBundleAsync(assetBundleAndAssetNames[0], owner, onCompleted, onFaulted);
         //}
-        public static Task<Object> LoadAssetAsync(string assetBundleName, string assetName, Type type = null, object owner = null)
+        public static Task<Object> LoadAssetAsync(string bundleName, string assetName, Type type = null, object dependency = null)
         {
             Task<Object[]> result;
             if (LoadAssetHandler != null)
@@ -870,23 +845,23 @@ namespace UnityEngine
                 string url = null;
                 if (mainManifest != null)
                 {
-                    var abInfo = GetAssetBundleInfo(assetBundleName);
+                    var abInfo = GetAssetBundleInfo(bundleName);
                     url = abInfo.url;
                 }
-                LoadAssetRequest request = LoadAssetRequest.FromAsset(url, assetBundleName, assetName, type, true, owner);
+                LoadAssetRequest request = LoadAssetRequest.FromAsset(url, bundleName, assetName, type, true, dependency);
                 LoadAssetHandler(request);
                 result = StartAssetRequest(request).StartTask<Object[]>();
             }
             else
             {
-                result = AssetBundleLoadAssetsAsyncHandler(assetBundleName, assetName, type, owner);
+                result = AssetBundleLoadAssetsAsyncHandler(bundleName, assetName, type, dependency);
             }
             return result
                 .ContinueWith(t =>
                 {
                     if (t.Result.Length == 0)
                     {
-                        Debug.LogError(LogPrefix + string.Format("load asset bundle fail, assetBundleName: {0}, assetName: {1}, type:{2}", assetBundleName, assetName, type));
+                        Debug.LogError(LogPrefix + string.Format("load asset bundle fail, assetBundleName: {0}, assetName: {1}, type:{2}", bundleName, assetName, type));
                         return null;
                     }
                     return t.Result[0];
@@ -900,53 +875,24 @@ namespace UnityEngine
             yield return new YieldReturn(request.loadedAssets);
         }
 
-        public static Task<T> LoadAssetAsync<T>(string assetBundleName, string assetName, object owner = null)
+        public static Task<T> LoadAssetAsync<T>(string bundleName, string assetName, object dependency = null)
             where T : Object
         {
-            return LoadAssetAsync(assetBundleName, assetName, typeof(T), owner)
+            return LoadAssetAsync(bundleName, assetName, typeof(T), dependency)
                 .ContinueWith(t =>
                 {
                     return (T)t.Result;
                 });
         }
 
-        public static Task<Object> LoadAssetAsync(string[] assetBundleAndAssetNames, object owner = null)
-        {
-            return LoadAssetAsync<Object>(assetBundleAndAssetNames[0], assetBundleAndAssetNames[1], owner);
-        }
-        public static Task<T> LoadAssetAsync<T>(string[] assetBundleAndAssetNames, object owner = null)
+
+        public static Task<T> LoadAssetAsync<T>(string[] assetBundleAndAssetNames, object dependency = null)
             where T : Object
         {
-            return LoadAssetAsync<T>(assetBundleAndAssetNames[0], assetBundleAndAssetNames[1], owner);
-        }
-        public static Task<T> InstantiateAsync<T>(string assetBundleName, string assetName, object owner = null)
-            where T : Object
-        {
-            return LoadAssetAsync<T>(assetBundleName, assetName, owner)
-                .ContinueWith(t =>
-                {
-                    return Object.Instantiate(t.Result);
-                });
-        }
-        public static Task<T> InstantiateAsync<T>(string[] assetBundleAndAssetNames, object owner = null)
-            where T : Object
-        {
-            return InstantiateAsync<T>(assetBundleAndAssetNames[0], assetBundleAndAssetNames[1], owner);
-        }
-        public static Task<GameObject> InstantiateAsync(string assetBundleName, string assetName, object owner = null)
-        {
-            return LoadAssetAsync<GameObject>(assetBundleName, assetName, owner)
-                .ContinueWith(t =>
-                {
-                    return Object.Instantiate(t.Result);
-                });
-        }
-        public static Task<GameObject> InstantiateAsync(string[] assetBundleAndAssetNames, object owner = null)
-        {
-            return InstantiateAsync(assetBundleAndAssetNames[0], assetBundleAndAssetNames[1], owner);
+            return LoadAssetAsync<T>(assetBundleAndAssetNames[0], assetBundleAndAssetNames[1], dependency);
         }
 
-        public static Task<Object[]> LoadAllAssetsAsync(string assetBundleName, Type type = null, object owner = null)
+        public static Task<Object[]> LoadAllAssetsAsync(string bundleName, Type type = null, object dependency = null)
         {
             Task<Object[]> result;
             if (LoadAssetHandler != null)
@@ -954,52 +900,38 @@ namespace UnityEngine
                 string url = null;
                 if (mainManifest != null)
                 {
-                    var abInfo = GetAssetBundleInfo(assetBundleName);
+                    var abInfo = GetAssetBundleInfo(bundleName);
                     url = abInfo.url;
                 }
-                LoadAssetRequest request = LoadAssetRequest.FromAsset(url, assetBundleName, null, type, true, owner);
+                LoadAssetRequest request = LoadAssetRequest.FromAsset(url, bundleName, null, type, true, dependency);
                 LoadAssetHandler(request);
                 result = StartAssetRequest(request).StartTask<Object[]>();
             }
             else
-                result = AssetBundleLoadAssetsAsyncHandler(assetBundleName, null, type, owner);
+                result = AssetBundleLoadAssetsAsyncHandler(bundleName, null, type, dependency);
             return result;
         }
 
-        public static Task<T[]> LoadAllAssetsAsync<T>(string assetBundleName, object owner = null)
+        public static Task<T[]> LoadAllAssetsAsync<T>(string assetBundleName, object dependency = null)
             where T : Object
         {
-            return LoadAllAssetsAsync(assetBundleName, typeof(T), owner)
+            return LoadAllAssetsAsync(assetBundleName, typeof(T), dependency)
                 .ContinueWith(t =>
                 {
                     return t.Result.Cast<T>().ToArray();
                 });
         }
-        public static Task<Object[]> LoadAllAssetsAsync(string[] assetBundleAndAssetNames, Type type = null, object owner = null)
-        {
-            return LoadAllAssetsAsync(assetBundleAndAssetNames[0], type, owner);
-        }
-        public static Task<T[]> LoadAllAssetsAsync<T>(string[] assetBundleAndAssetNames, object owner = null)
-            where T : Object
-        {
-            return LoadAllAssetsAsync<T>(assetBundleAndAssetNames[0], owner);
-        }
 
-        public static Task LoadSceneAsync(string[] assetBundleName, LoadSceneMode mode, Action<float> progressCallback = null, object owner = null)
-        {
-            string sceneName = Path.GetFileNameWithoutExtension(assetBundleName[1]);
-            return LoadSceneAsync(assetBundleName[0], sceneName, mode, progressCallback, owner);
-        }
 
-        public static Task LoadSceneAsync(string assetBundleName, string sceneName, LoadSceneMode mode = LoadSceneMode.Single, Action<float> progressCallback = null, object owner = null)
+        public static Task LoadSceneAsync(string bundleName, string sceneName, LoadSceneMode mode = LoadSceneMode.Single, Action<float> progressCallback = null, object dependency = null)
         {
-            return Task.Run(_LoadSceneAsync(assetBundleName, sceneName, mode, progressCallback, owner));
+            return Task.Run(_LoadSceneAsync(bundleName, sceneName, mode, progressCallback, dependency));
         }
 
 
-        static IEnumerator _LoadSceneAsync(string assetBundleName, string sceneName, LoadSceneMode mode, Action<float> progressCallback = null, object owner = null)
+        static IEnumerator _LoadSceneAsync(string bundleName, string sceneName, LoadSceneMode mode, Action<float> progressCallback = null, object dependency = null)
         {
-            Debug.Log("load scene:" + assetBundleName + ", " + sceneName + ", " + mode);
+            Debug.Log("load scene:" + bundleName + ", " + sceneName + ", " + mode);
             if (Mode == AssetBundleMode.Editor)
             {
                 SceneManager.LoadSceneAsync(sceneName, mode);
@@ -1012,10 +944,10 @@ namespace UnityEngine
                 string url = null;
                 if (mainManifest != null)
                 {
-                    var abInfo = GetAssetBundleInfo(assetBundleName);
+                    var abInfo = GetAssetBundleInfo(bundleName);
                     url = abInfo.url;
                 }
-                LoadAssetRequest request = LoadAssetRequest.FromScene(url, assetBundleName, sceneName, mode, true, owner);
+                LoadAssetRequest request = LoadAssetRequest.FromScene(url, bundleName, sceneName, mode, true, dependency);
                 LoadAssetHandler(request);
                 task = StartAssetRequest(request).StartTask();
                 while (!request.isDone)
@@ -1026,7 +958,7 @@ namespace UnityEngine
             }
             else
             {
-                yield return LoadAssetBundleAsync(assetBundleName);
+                yield return LoadAssetBundleAsync(bundleName);
                 var async = SceneManager.LoadSceneAsync(sceneName, mode);
                 while (!async.isDone)
                 {
@@ -1275,7 +1207,7 @@ namespace UnityEngine
                 {
                     abInfo.url = string.Format(abUrlTemplate, abInfo.name/*.Replace("/", "\\")*/);
                 }
-                
+
                 abInfo.isVariant = allAssetBundlesWithVariantSet2.Contains(assetbundleName);
 
                 if (nameHasHash)
@@ -2258,9 +2190,9 @@ namespace UnityEngine
             //    Debug.Log(LogPrefix + "local ver null");
             //}
 
-            if (remoteVer != null && localVer != null &&   remoteVer.IsLatest(localVer) && latestManifestUrl != remoteManifestUrl)
+            if (remoteVer != null && localVer != null && remoteVer.IsLatest(localVer) && latestManifestUrl != remoteManifestUrl)
             {
-                if (!groupChanged )
+                if (!groupChanged)
                 {
                     foreach (var g in remoteVer.groups)
                     {
@@ -2273,7 +2205,7 @@ namespace UnityEngine
                             break;
                         }
                     }
-                } 
+                }
 
                 if (groupChanged)
                 {
@@ -2851,7 +2783,7 @@ namespace UnityEngine
                     sbyte[] bytes = assetBundleAndroidUtilityClass.CallStatic<sbyte[]>("ReadStreamingAssetsAllBytes", relativePath);
                     byte[] buff = new byte[bytes.Length];
                     Buffer.BlockCopy(bytes, 0, buff, 0, bytes.Length);
-                    result = buff; 
+                    result = buff;
                 }
             }
 
@@ -3363,7 +3295,7 @@ namespace UnityEngine
         {
             AssetBundleAddressableAsset.AssetInfo assetInfo = null;
             assetName = null;
-     
+
             assetName2Bundle.TryGetValue(assetNameOrGuid, out assetInfo);
 
             if (assetInfo != null)
@@ -3383,81 +3315,98 @@ namespace UnityEngine
         #region 新的资源加载接口
 
 
-        public static Object LoadAsset(string assetName, Type type = null, object owner = null)
+        public static Object LoadAsset(string assetName, Type type = null, object lifetime = null)
         {
             string bundleName;
             bundleName = GetBundleName(assetName, out assetName);
             if (bundleName == null)
                 return null;
-            return LoadAsset(bundleName, assetName, type, owner);
+            return LoadAsset(bundleName, assetName, type, lifetime);
         }
 
-        public static T LoadAsset<T>(string assetName, object owner = null)
+        public static T LoadAsset<T>(string assetName, object lifetime = null)
                where T : UnityEngine.Object
         {
             string bundleName;
             bundleName = GetBundleName(assetName, out assetName);
             if (bundleName == null)
                 return default(T);
-            return LoadAsset<T>(bundleName, assetName, owner);
+            return LoadAsset(bundleName, assetName, typeof(T), lifetime) as T;
         }
 
-        public static Task<Object> LoadAssetAsync(string assetName, Type type = null, object owner = null)
+        public static Task<Object> LoadAssetAsync(string assetName, Type type = null, object lifetime = null)
         {
             string bundleName;
             bundleName = GetBundleName(assetName, out assetName);
-            return LoadAssetAsync(bundleName, assetName, type, owner);
+            return LoadAssetAsync(bundleName, assetName, type, lifetime);
         }
 
-        public static Task<T> LoadAssetAsync<T>(string assetName, object owner = null)
+        public static Task<T> LoadAssetAsync<T>(string assetName, object lifetime = null)
                where T : UnityEngine.Object
         {
             string bundleName;
             bundleName = GetBundleName(assetName, out assetName);
-            return LoadAssetAsync<T>(bundleName, assetName, owner);
+            return LoadAssetAsync<T>(bundleName, assetName, lifetime);
         }
 
-        public static GameObject Instantiate(string assetName, object owner = null)
+        public static GameObject Instantiate(string assetName, object lifetime = null)
         {
             string bundleName;
             bundleName = GetBundleName(assetName, out assetName);
             if (bundleName == null)
                 return null;
-            return Instantiate(bundleName, assetName, owner);
+            var obj = LoadAsset(bundleName, assetName, typeof(GameObject), lifetime);
+            if (!obj)
+                return null;
+            return Object.Instantiate(obj) as GameObject;
         }
 
-        public static GameObject Instantiate(string assetName, Transform parent, object owner = null)
+        public static GameObject Instantiate(string assetName, Transform parent, object lifetime = null)
         {
             string bundleName;
             bundleName = GetBundleName(assetName, out assetName);
             if (bundleName == null)
                 return null;
-            return Instantiate(bundleName, assetName, parent, owner);
+            var obj = LoadAsset(bundleName, assetName, typeof(GameObject), lifetime);
+            if (!obj)
+                return null;
+            return Object.Instantiate(obj, parent) as GameObject;
         }
 
-        public static T Instantiate<T>(string assetName, object owner = null)
+        public static T Instantiate<T>(string assetName, object lifetime = null)
            where T : UnityEngine.Object
         {
             string bundleName;
             bundleName = GetBundleName(assetName, out assetName);
             if (bundleName == null)
                 return default(T);
-            return Instantiate<T>(bundleName, assetName, owner);
+            var obj = LoadAsset(bundleName, assetName, typeof(T), lifetime);
+            if (!obj)
+                return null;
+            return Object.Instantiate(obj) as T;
         }
 
-        public static Task<T> InstantiateAsync<T>(string assetName, object owner = null)
+        public static Task<T> InstantiateAsync<T>(string assetName, object lifetime = null)
                where T : UnityEngine.Object
         {
             string bundleName;
             bundleName = GetBundleName(assetName, out assetName);
-            return InstantiateAsync<T>(bundleName, assetName, owner);
+            return LoadAssetAsync<T>(bundleName, assetName, lifetime)
+                .ContinueWith(t =>
+                {
+                    return Object.Instantiate(t.Result);
+                });
         }
 
-        public static Task<GameObject> InstantiateAsync(string assetName, object owner = null)
+        public static Task<GameObject> InstantiateAsync(string assetName, Transform parent = null, object lifetime = null)
         {
             string bundleName;
             bundleName = GetBundleName(assetName, out assetName);
-            return InstantiateAsync(bundleName, assetName, owner);
+            return LoadAssetAsync<GameObject>(bundleName, assetName, lifetime)
+                .ContinueWith(t =>
+                {
+                    return Object.Instantiate(t.Result, parent);
+                });
         }
 
         #endregion

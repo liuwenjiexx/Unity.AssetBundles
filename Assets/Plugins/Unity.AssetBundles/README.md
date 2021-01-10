@@ -229,20 +229,16 @@ Task<string> InitializeAsync()
 ### 加载
 
 ```c#
-T LoadAsset<T>(string assetBundleName, string assetName, object owner)
-Task<T> LoadAssetAsync<T>(string assetBundleName, string assetName)
+T LoadAsset<T>(string assetName, object lifetime)
+Task<T> LoadAssetAsync<T>(string assetName, object lifetime)
 ```
-- **assetBundleName**
-
-​	AssetBundle 名称，小写
-
 - **assetName**
 
 ​	资源名称，支持（路径、文件名、文件名不含扩展名) 
 
-- **owner**
+- **lifetime**
 
-  AssetBundle 生存期管理对象，如果内存中没有对 owner 的引用则可以调用 UnloadUnused 来释放已加载的AssetBundle，在 AssetBundle Analysis 窗口可以查看 owner 的引用状态
+  可选参数，AssetBundle 生存期管理对象，如果内存中没有对 lifetime的引用则可以调用 UnloadUnused 来释放已加载的AssetBundle，在 AssetBundle Analysis 窗口可以查看 lifetime 的引用状态
   
 - **T**
 
@@ -252,7 +248,7 @@ Task<T> LoadAssetAsync<T>(string assetBundleName, string assetName)
 **样例**
 
 ```c#
-AssetBundles.LoadAsset<GameObject>("<BundleName>", "<AssetName>");
+AssetBundles.LoadAsset<GameObject>("<AssetName>");
 
 //使用AssetBundleNames 访问
 AssetBundles.LoadAsset<GameObject>(AssetBundleNames.<BundleName>.<AssetName>);
@@ -263,17 +259,20 @@ AssetBundles.LoadAsset<GameObject>(AssetBundleNames.<BundleName>_AssetBundle, "<
 
 异步加载
 
-```c#
-//使用协程方式
-var prefabTask = AssetBundles.LoadAssetAsync<GameObject>("<BundleName>", "<AssetName>");
-yield return prefabTask;
-//获取返回值：prefabTask.Result
+使用协程方式
 
-//使用回调方式
-AssetBundles.LoadAssetAsync<GameObject>("<BundleName>", "<AssetName>")
+```c#
+var prefabTask = AssetBundles.LoadAssetAsync<GameObject>("<AssetName>");
+yield return prefabTask;
+prefabTask.Result
+```
+使用回调方式
+
+```
+AssetBundles.LoadAssetAsync<GameObject>("<AssetName>")
 	.ContinueWith(t =>
 	{
-		//获取返回值：t.Result
+		t.Result
 	});
 ```
 
@@ -295,27 +294,38 @@ Assets.Prefab.Character.Instantiate("<AssetName>");
 ```c#
 public interface IAssetLoader
 {
-	UnityEngine.Object Load(string assetName, Type assetType);
+   Object LoadAsset(string assetName, Type assetType, object lifetime = null);
+	Task<Object> LoadAssetAsync(string assetName, Type assetType, object lifetime = null);
 }
 ```
 
-##### 实现资源接口
-
-AssetBundles 加载
+##### AssetBundles 加载器
 
 ```c#
-class AssetBundlesLoader : IAssetLoader
+public class AssetBundlesLoader : IAssetLoader
 {
     public string assetNamePrefix;
 
     public AssetBundlesLoader(string assetNamePrefix)
     {
-    	this.assetNamePrefix = assetNamePrefix ?? string.Empty;
+        if (string.IsNullOrEmpty(assetNamePrefix))
+            this.assetNamePrefix = null;
+        else
+            this.assetNamePrefix = assetNamePrefix;
     }
 
-    public UnityEngine.Object Load(string assetName, Type assetType)
+	public UnityEngine.Object LoadAsset(string assetName, Type assetType, object lifetime = null)
     {
-	    return AssetBundles.LoadAsset(assetNamePrefix + assetName, assetType);
+        if (assetNamePrefix != null)
+            assetName = assetNamePrefix + assetName;
+        return AssetBundles.LoadAsset(assetName, assetType, lifetime);
+    }
+    
+    public Task<UnityEngine.Object> LoadAssetAsync(string assetName, Type assetType, object lifetime = null)
+    {
+        if (assetNamePrefix != null)
+            assetName = assetNamePrefix + assetName;
+        return AssetBundles.LoadAssetAsync(assetName, assetType, lifetime);
     }
 }
 ```
@@ -341,8 +351,11 @@ public class Assets
     public readonly static IAssetLoader Config = new AssetBundlesLoader("Assets/Src/Config/");
 }
 ```
+**使用**
 
-
+```c#
+Assets.Config.LoadAsset<TextAsset>("setting");
+```
 
 
 
@@ -351,8 +364,8 @@ public class Assets
 ### 实例化
 
 ```c#
-GameObject Instantiate(string assetBundleName, string assetName)
-Task<GameObject> InstantiateAsync(string assetBundleName, string assetName)
+GameObject Instantiate(string assetName, object lifetime)
+Task<GameObject> InstantiateAsync(string assetName, object lifetime)
 ```
 
 实例化资源
@@ -360,12 +373,12 @@ Task<GameObject> InstantiateAsync(string assetBundleName, string assetName)
 **样例**
 
 ```c#
-GameObject go = AssetBundles.Instantiate("<BundleName>", "<AssetName>");
+GameObject go = AssetBundles.Instantiate("<AssetName>");
 ```
 异步实例化
 
 ```c#
-var goTask = AssetBundles.InstantiateAsync("<BundleName>", "<AssetName>");
+var goTask = AssetBundles.InstantiateAsync("<AssetName>");
 yield return goTask; //goTask.Result
 ```
 
@@ -374,26 +387,19 @@ yield return goTask; //goTask.Result
 ### 卸载
 
 ```c#
-void UnloadUnused(IEnumerable<string> assetBundleNames, bool allObjects = false)
+void UnloadUnused(bool allObjects = false)
 ```
-
-- **assetBundleNames**
-
-
-​	释放指定的 AssetBundle
 
 - **allObjects**
 
 ​	将传递给 AssetBundle.Unload(allObjects)
-释放未使用的AssetBundle，未使用的判断依据是检查是否存在引用 LoadAsset 时传递的 Owner 参数
+释放未使用的AssetBundle，未使用的判断依据是检查是否存在引用 LoadAsset 时传递的 lifetime 参数
 
 **样例**
 
 ```c#
-//加载AssetBundle
-AssetBundles.LoadAssetBundle("<BundleName>");
 //卸载AssetBundle
-AssetBundles.UnloadUnused("<BundleName>");
+AssetBundles.UnloadUnused();
 ```
 
 
@@ -403,7 +409,7 @@ AssetBundles.UnloadUnused("<BundleName>");
 ## 资源规则
 
 - Shader资源
-  - 避免对内置 Shader 引用，资源路径为 `Resources/xxxx`，在官网下载 `builtin_shaders-xxxxxx.zip`，解压到工程内，使用工具替换已有的材质球shader
+  - 避免对内置 Shader 引用，资源路径为 `Resources/xxxx`,内置资源不能单独打资源包，所以会重复生成，解决方法，在官网下载 `builtin_shaders-xxxxxx.zip`，解压到工程内，使用工具替换已有的材质球shader
   - Shader单独打包会丢失变体 feature
     - feature 关键字存储在材质球，Shader与Material在同一个资源包
     - 使用 Shader Variant Collection 收集变体，菜单 Edit > Project Settings > Graphics Currently tracked xxx variants 点击 `Save to asset...` , 该文件与shader在同一个资源包
@@ -484,38 +490,8 @@ AssetBundle 在初始化中提前加载，加载后的资源可以使用同步�
 
 
 
-## 变体
+## [变体](Doc/变体配置.md)
 
-设置资源多个版本
-
-比如性能版本：high, middle, low
-
-
-
-1. `项/变体` 点击右边 `+` 按钮 添加变体配置
-
-2. 设置 `变体` 名称，正则表达式格式
-
-   ​	文件夹名称
-
-   ```c#
-   {$AssetPath:#DirectoryName}
-   ```
-
-   ​	正则表达式，result 组返回值
-
-   ```c#
-   {$AssetPath:#FileNameWithoutExtension:/.*_(?<result>.+$)/}
-   ```
-
-3. 设置 `过滤`，路径模式过滤
-
-4. 程序配置
-
-   ```c#
-   //设置变体
-   AssetBundles.Variants.Add("<Variant>");
-   ```
 
 
 
@@ -530,99 +506,34 @@ AssetBundle 在初始化中提前加载，加载后的资源可以使用同步�
 
 ## 加密
 
-保护资源，因为是对称加密，密匙保存在包体中可被破解
+保护资源，因为是对称加密，密匙保存在包体中可被破解，加密资源如数据配置，lua脚本
 
-- 编辑器设置
+**编辑器设置**
 
-	1. 勾选 `加密` 开启加密
+1. 勾选 `加密` 开启加密
 
-	2. 设置 `加密密匙`，`加密 IV`，点击 `Gennerate` 按钮生成随机加密Key
+2. 设置 `加密密匙`，`加密 IV`，点击 `Gennerate` 按钮生成随机加密Key
 
-	3. 设置加密过滤，如果 `包含` 和 `排除` 为空则默认所有都进行加密，值为正则表达式格式
+3. 设置加密过滤，如果 `包含` 和 `排除` 为空则默认所有都进行加密，值为正则表达式格式
 
 
 
 ## 签名
 
-​	防止资源被串改，比如数据
+​	防止资源被串改，比如数据配置，lua脚本
 
-- 编辑器设置
+**编辑器设置**
 
-	1. 勾选 `签名` 开启签名
+1. 勾选 `签名` 开启签名
 2. 设置 `签名Key路径` 点击 `Create` 按钮生成
-	3. 设置签名公匙
+3. 设置签名公匙
 4. 设置签名过滤 `包含` 和 `排除`，值为正则表达式格式
 
 
-## 版本
-
-版本文件
-
-位置：清单位置
-
-#### 版本文件
-
-```
-<Platform>.json
-```
-
-```json
-{
-    "platform": "<平台名称>",
-    "bundleCode": <资源版本号>,
-    "appVersion": "<应用版本号>",
-    "timestamp": "<UTC时间戳>",
-    "hash": "<清单哈希值(MD5)>",
-    "commitId": "<Git提交ID>",
-    "userData": "<用户数据>",
-    "channel": "<渠道>",
-    "groups": ["<local>","<remote>"]
-}
-```
-
-- platform
-
-  平台名称: Android, iOS, Windows
-
-- bundleCode
-
-  版本号, 从1开始
-
-- appVersion
-
-  应用版本号 `Application.version`，编辑器设置 `应用版本格式`
-
-- timestamp
-
-  生成时间戳，UTC毫秒值
-
-- hash
-
-  清单哈希值, 默认MD5值
-
-- commitId
-
-  Git提交ID
-
-- userData
-
-  用户数据
-
-- channel
-
-  渠道
-
-- groups
-
-  分组，local：本地资源组，remote：远程待下载资源组
 
 
 
-
-
-## 下载更新
-
-[下载更新](Doc/下载更新.md)
+## [下载](Doc/下载更新.md)
 
 
 

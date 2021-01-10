@@ -4,9 +4,10 @@ using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using System.Linq;
+using Object = UnityEngine.Object;
 
 namespace UnityEditor.Build
-{ 
+{
 
 
     class AssetBundleAnalysisWindow : EditorWindow
@@ -62,7 +63,7 @@ namespace UnityEditor.Build
 
             using (new GUILayout.HorizontalScope())
             {
-                using (var sv = new GUILayout.ScrollViewScope(scrollPos, "box", GUILayout.MaxWidth(Screen.width * 0.3f)))
+                using (var sv = new GUILayout.ScrollViewScope(scrollPos, "box", GUILayout.MaxWidth(Screen.width * 0.4f)))
                 {
                     scrollPos = sv.scrollPosition;
                     foreach (var abInfo in AssetBundles.mainManifest.AssetBundleInfos.OrderBy(o => o.Name))
@@ -71,7 +72,7 @@ namespace UnityEditor.Build
                     }
                 }
 
-                using (var sv = new GUILayout.ScrollViewScope(scrollPos2, "box", GUILayout.MaxWidth(Screen.width * 0.7f)))
+                using (var sv = new GUILayout.ScrollViewScope(scrollPos2, "box", GUILayout.MaxWidth(Screen.width * 0.6f)))
                 {
                     scrollPos2 = sv.scrollPosition;
 
@@ -269,7 +270,7 @@ namespace UnityEditor.Build
 
             using (new GUILayout.HorizontalScope())
             {
-                if (GUILayout.Button(string.Format("Owner Dependency ({0})", ownerDeps.Count), "label"))
+                if (GUILayout.Button(string.Format("Lifetime Dependency ({0})", ownerDeps.Count), "label"))
                 {
                     isOwnerDependencyExpanded = !isOwnerDependencyExpanded;
                 }
@@ -287,7 +288,7 @@ namespace UnityEditor.Build
                 }
             }
 
-            List<object> ownerObjects = new List<object>();
+            List<object> lifetimeObjects = new List<object>();
             if (isLoaded && abRef != null)
             {
                 foreach (WeakReference weakRef in abRef.Owners)
@@ -295,14 +296,14 @@ namespace UnityEditor.Build
                     object obj = weakRef.Target;
                     if (obj != null)
                     {
-                        ownerObjects.Add(obj);
+                        lifetimeObjects.Add(obj);
                     }
                 }
             }
 
             using (new GUILayout.HorizontalScope())
             {
-                if (GUILayout.Button(string.Format("Owner Object ({0})", ownerObjects.Count), "label"))
+                if (GUILayout.Button(string.Format("Lifetime ({0})", lifetimeObjects.Count), "label"))
                 {
                     isOwnerObjectExpanded = !isOwnerObjectExpanded;
                 }
@@ -312,14 +313,21 @@ namespace UnityEditor.Build
                 if (isLoaded && abRef != null)
                 {
 
-                    foreach (var obj in ownerObjects)
+                    foreach (var obj in lifetimeObjects)
                     {
                         if (obj != null)
                         {
                             using (new GUILayout.HorizontalScope())
                             {
                                 GUILayout.Space(16);
-                                GUILayout.Label(string.Format("{0} ({1})", (obj.ToString() ?? string.Empty), obj.GetType().FullName));
+                                if (GUILayout.Button(string.Format("{0} ({1})", (obj.ToString() ?? string.Empty), obj.GetType().FullName), "label"))
+                                {
+                                    if (obj is UnityEngine.Object)
+                                    {
+                                        Object o = obj as UnityEngine.Object;
+                                        EditorGUIUtility.PingObject(o);
+                                    }
+                                }
                             }
                         }
                     }
